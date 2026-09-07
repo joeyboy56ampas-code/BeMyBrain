@@ -4,7 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Brain, Eye, EyeOff, CheckCircle2, Globe } from "lucide-react";
+import { useLang } from "../../lib/useLang";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -15,12 +16,12 @@ const SAGE = "#8FA98C";
 const TEXT_MUTED = "#A9A5BE";
 const TEXT_FAINT = "#726E88";
 
-const ERROR_MESSAGES = {
-  missing_fields: "กรอกข้อมูลให้ครบทุกช่อง",
-  password_too_short: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
-  already_exists: "ชื่อผู้ใช้หรืออีเมลนี้มีคนใช้แล้ว",
-  signup_failed: "สมัครสมาชิกไม่สำเร็จ ลองใหม่อีกครั้ง",
-  google_not_verified: "ยืนยัน Gmail หมดอายุแล้ว กรุณาเชื่อมต่อใหม่",
+const ERROR_KEYS = {
+  missing_fields: "err_missing_fields",
+  password_too_short: "err_password_too_short",
+  already_exists: "err_already_exists",
+  signup_failed: "err_signup_failed",
+  google_not_verified: "err_google_not_verified",
 };
 
 function GoogleIcon() {
@@ -38,6 +39,7 @@ function SignupInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawToken = searchParams.get("verify");
+  const { lang, toggleLang, t } = useLang();
 
   const [checking, setChecking] = useState(!!rawToken);
   const [verifiedEmail, setVerifiedEmail] = useState(null);
@@ -62,12 +64,13 @@ function SignupInner() {
       const data = await res.json();
       setChecking(false);
       if (!res.ok) {
-        setTokenError(ERROR_MESSAGES[data.error] || "ยืนยัน Gmail ไม่สำเร็จ");
+        setTokenError(t(ERROR_KEYS[data.error]) || t("err_google_not_verified"));
         return;
       }
       setVerifiedEmail(data.email);
       if (data.name) setName(data.name);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawToken]);
 
   const handleSubmit = async (e) => {
@@ -75,7 +78,7 @@ function SignupInner() {
     setError("");
 
     if (password !== confirm) {
-      setError("รหัสผ่านทั้งสองช่องไม่ตรงกัน");
+      setError(t("signup_error_password_mismatch"));
       return;
     }
 
@@ -88,7 +91,7 @@ function SignupInner() {
     const data = await res.json();
 
     if (!res.ok) {
-      setError(ERROR_MESSAGES[data.error] || "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");
+      setError(t(ERROR_KEYS[data.error]) || t("signup_error_generic"));
       setLoading(false);
       return;
     }
@@ -109,8 +112,17 @@ function SignupInner() {
         minHeight: "100vh",
         fontFamily: "'Noto Sans Thai', sans-serif",
       }}
-      className="w-full flex items-center justify-center px-6 py-12"
+      className="w-full flex items-center justify-center px-6 py-12 relative"
     >
+      <button
+        onClick={toggleLang}
+        style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
+        className="absolute top-5 right-5 flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium"
+        title="Switch language / เปลี่ยนภาษา"
+      >
+        <Globe size={13} /> {lang === "th" ? "TH" : "EN"}
+      </button>
+
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Brain size={22} style={{ color: GOLD }} />
@@ -121,14 +133,14 @@ function SignupInner() {
 
         <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-7">
           <h1 style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER, fontSize: "1.25rem" }} className="mb-1">
-            สร้างสมองใหม่
+            {t("signup_title")}
           </h1>
           <p style={{ color: TEXT_FAINT }} className="mb-6 leading-relaxed text-sm">
-            ทุกบัญชีต้องเชื่อมต่อ Gmail เพื่อยืนยันตัวตน ก่อนตั้งชื่อผู้ใช้และรหัสผ่านของคุณเอง
+            {t("signup_tagline")}
           </p>
 
           {checking && (
-            <p style={{ color: TEXT_FAINT }} className="text-sm text-center py-6">กำลังตรวจสอบ…</p>
+            <p style={{ color: TEXT_FAINT }} className="text-sm text-center py-6">{t("signup_checking")}</p>
           )}
 
           {!checking && !verifiedEmail && (
@@ -139,10 +151,10 @@ function SignupInner() {
                 style={{ background: GOLD, color: INK }}
                 className="w-full rounded-lg py-2.5 font-medium flex items-center justify-center gap-2 hover:opacity-90"
               >
-                <GoogleIcon /> เชื่อมต่อ Gmail เพื่อเริ่มลงทะเบียน
+                <GoogleIcon /> {t("connect_gmail_button")}
               </button>
               <p style={{ color: TEXT_FAINT }} className="text-xs text-center leading-relaxed">
-                ระบบจะพาไปยืนยันตัวตนกับ Google ก่อน แล้วค่อยกลับมาตั้งชื่อผู้ใช้และรหัสผ่านที่นี่
+                {t("connect_gmail_desc")}
               </p>
             </div>
           )}
@@ -155,32 +167,32 @@ function SignupInner() {
               >
                 <CheckCircle2 size={16} style={{ color: SAGE }} />
                 <span style={{ color: PAPER }} className="truncate">{verifiedEmail}</span>
-                <span style={{ color: SAGE }} className="text-xs ml-auto shrink-0">ยืนยันแล้ว</span>
+                <span style={{ color: SAGE }} className="text-xs ml-auto shrink-0">{t("email_verified_badge")}</span>
               </div>
 
               <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อที่แสดง</span>
+                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("display_name_label")}</span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="เช่น พลอย"
+                  placeholder={t("display_name_ph")}
                   style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
                   className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
                 />
               </label>
               <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อผู้ใช้ (username)</span>
+                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("username_label")} (username)</span>
                 <input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="ใช้เข้าสู่ระบบครั้งถัดไป"
+                  placeholder={t("username_ph")}
                   style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
                   className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
                   required
                 />
               </label>
               <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</span>
+                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("password_hint_label")}</span>
                 <div className="relative mt-1">
                   <input
                     type={showPw ? "text" : "password"}
@@ -198,7 +210,7 @@ function SignupInner() {
                 </div>
               </label>
               <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">ยืนยันรหัสผ่าน</span>
+                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("confirm_password_label")}</span>
                 <input
                   type={showPw ? "text" : "password"}
                   value={confirm}
@@ -218,16 +230,16 @@ function SignupInner() {
                 style={{ background: GOLD, color: INK }}
                 className="w-full rounded-lg py-2.5 font-medium mt-1 hover:opacity-90 disabled:opacity-60"
               >
-                {loading ? "กำลังสมัคร…" : "ยืนยันการลงทะเบียน"}
+                {loading ? t("signup_submitting") : t("signup_submit")}
               </button>
             </form>
           )}
         </div>
 
         <p style={{ color: TEXT_FAINT }} className="text-xs text-center mt-5">
-          มีบัญชีอยู่แล้ว?{" "}
+          {t("have_account_prompt")}{" "}
           <Link href="/login" style={{ color: GOLD }} className="hover:underline">
-            เข้าสู่ระบบ
+            {t("login_link")}
           </Link>
         </p>
       </div>

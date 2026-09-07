@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
   Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
-  ChevronRight, Check, Loader2, Brain, LogOut, Trash2, Settings2, Globe
+  ChevronRight, Check, Brain, LogOut, Trash2, Settings2, Globe
 } from "lucide-react";
 import { makeT } from "../../lib/i18n";
 import ConfirmDialog from "../../components/ConfirmDialog";
@@ -48,6 +48,40 @@ const monthKey = (iso) => {
   return `${months[d.getMonth()]} ${d.getFullYear() + 543}`;
 };
 
+// บีบอัดรูปก่อนเก็บ (resize ด้านยาวสุดไม่เกิน 1600px + แปลงเป็น JPEG คุณภาพ 80%)
+// เพราะรูปถูกเก็บเป็น base64 ปนอยู่ใน Supabase database (จำกัดที่ 500MB บนแพลนฟรี)
+// ลดขนาดตรงนี้ช่วยยืดอายุพื้นที่เก็บข้อมูลได้มาก
+function compressImage(file, maxDimension = 1600, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 /* ---------- persistence via our own server API (not direct Supabase from browser) ---------- */
 async function loadBundle() {
   try {
@@ -76,6 +110,19 @@ async function saveBundle(entries, people, categories) {
   } catch (e) {
     console.error("save failed", e);
   }
+}
+
+// รายชื่อบุคคลที่แสดงจริงคำนวณจาก entries โดยตรงเสมอ (ไม่พึ่งพา people[] ที่เก็บแยกไว้เพียงอย่างเดียว)
+// เพื่อกันปัญหาชื่อหลุดหายถ้า people[] เคยไม่ sync กับ entries ในอดีต — และซ่อมข้อมูลเก่าที่เคยพังไปแล้วโดยอัตโนมัติด้วย
+function mergedPeopleRoster(entries, people) {
+  const map = new Map();
+  people.forEach((p) => map.set(p.name, { name: p.name, favorite: !!p.favorite }));
+  entries.forEach((e) => {
+    (e.people || []).forEach((n) => {
+      if (!map.has(n)) map.set(n, { name: n, favorite: false });
+    });
+  });
+  return Array.from(map.values());
 }
 
 export default function Dashboard() {
@@ -157,7 +204,10 @@ export default function Dashboard() {
   };
 
   const toggleFavorite = (name) => {
-    const next = people.map((p) => (p.name === name ? { ...p, favorite: !p.favorite } : p));
+    const exists = people.find((p) => p.name === name);
+    const next = exists
+      ? people.map((p) => (p.name === name ? { ...p, favorite: !p.favorite } : p))
+      : [...people, { name, favorite: true }];
     setPeople(next);
     persist(entries, next, categories);
   };
@@ -186,17 +236,11 @@ export default function Dashboard() {
   };
 
   if (status === "loading" || booting) {
-    return (
-      <div style={{ background: INK, minHeight: "100vh", fontFamily: FONT_BODY }} className="w-full flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3" style={{ color: TEXT_MUTED }}>
-          <Loader2 className="animate-spin" size={22} style={{ color: GOLD }} />
-          <span>กำลังเปิดสมองของคุณ…</span>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
   if (!session) return null;
   const user = { name: session.user.name, email: session.user.email, image: session.user.image };
+  const peopleRoster = mergedPeopleRoster(entries, people);
 
   return (
     <div style={{ background: INK, fontFamily: FONT_BODY, minHeight: "100vh" }} className="w-full flex text-sm">
@@ -232,7 +276,7 @@ export default function Dashboard() {
               onRequestDelete={setPendingDeleteEntry} t={t} />
           )}
           {view === "people" && (
-            <PeopleView people={people} entries={entries} active={activeFilter} onOpen={setActiveFilter}
+            <PeopleView people={peopleRoster} entries={entries} active={activeFilter} onOpen={setActiveFilter}
               onToggleFavorite={toggleFavorite} onRequestDelete={setPendingDeleteEntry} t={t} />
           )}
           {view === "search" && (
@@ -245,7 +289,7 @@ export default function Dashboard() {
 
       {showComposer && (
         <Composer
-          categories={categories} people={people} t={t}
+          categories={categories} people={peopleRoster} t={t}
           onClose={() => setShowComposer(false)}
           onSave={(entry) => { addEntry(entry); setShowComposer(false); }}
         />
@@ -274,6 +318,46 @@ export default function Dashboard() {
           setPendingDeleteEntry(null);
         }}
       />
+    </div>
+  );
+}
+
+/* ---------------- loading skeleton (matches the real layout shape) ---------------- */
+function Shimmer({ className = "", style = {} }) {
+  return (
+    <div
+      className={`animate-pulse rounded-lg ${className}`}
+      style={{ background: INK_LINE, ...style }}
+    />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div style={{ background: INK, fontFamily: FONT_BODY, minHeight: "100vh" }} className="w-full flex text-sm">
+      <aside style={{ background: INK_SOFT, borderRight: `1px solid ${INK_LINE}`, width: "232px" }} className="hidden md:flex shrink-0 flex-col py-6 px-4 gap-2">
+        <div className="flex items-center gap-2 px-2 mb-6">
+          <Brain size={18} style={{ color: GOLD, opacity: 0.4 }} />
+          <Shimmer className="h-4 w-24" />
+        </div>
+        {[...Array(4)].map((_, i) => <Shimmer key={i} className="h-8 w-full" />)}
+        <div className="h-4" />
+        {[...Array(3)].map((_, i) => <Shimmer key={i} className="h-6 w-full" />)}
+      </aside>
+      <main className="flex-1 min-w-0 flex flex-col">
+        <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-3 px-4 sm:px-8 py-4">
+          <Shimmer className="h-9 flex-1 rounded-full" />
+          <Shimmer className="h-9 w-16 rounded-full shrink-0" />
+        </div>
+        <div className="px-4 sm:px-8 pt-8">
+          <Shimmer className="h-7 w-32 mb-6" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <Shimmer key={i} className="h-28 rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -401,7 +485,7 @@ function EntryCard({ entry, onRequestDelete }) {
         </button>
       )}
       {entry.image && (
-        <img src={entry.image} alt="" className="w-full h-40 object-cover rounded-lg mb-1" />
+        <img src={entry.image} alt="" className="w-full aspect-[4/3] object-cover rounded-lg mb-1" />
       )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
       <p className="leading-relaxed">{entry.text}</p>
@@ -648,15 +732,22 @@ function Composer({ categories, people, onClose, onSave, t }) {
   const [image, setImage] = useState(null);
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [newPerson, setNewPerson] = useState("");
+  const [compressing, setCompressing] = useState(false);
   const fileRef = useRef(null);
   const favorites = [...people].filter((p) => p.favorite);
   const others = [...people].filter((p) => !p.favorite);
 
-  const handleFile = (f) => {
+  const handleFile = async (f) => {
     if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => setImage(reader.result);
-    reader.readAsDataURL(f);
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(f);
+      setImage(compressed);
+    } catch (e) {
+      console.error("image compression failed", e);
+    } finally {
+      setCompressing(false);
+    }
   };
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   const addTypedPerson = () => {
@@ -701,14 +792,14 @@ function Composer({ categories, people, onClose, onSave, t }) {
             <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> {t("composer_photo")}</div>
             {image ? (
               <div className="relative">
-                <img src={image} alt="" className="w-full h-32 object-cover rounded-lg" />
+                <img src={image} alt="" className="w-full aspect-[4/3] object-cover rounded-lg" />
                 <button onClick={() => setImage(null)} style={{ background: INK }} className="absolute top-2 right-2 p-1 rounded-full">
                   <X size={13} style={{ color: PAPER }} />
                 </button>
               </div>
             ) : (
-              <button onClick={() => fileRef.current?.click()} style={{ background: INK, border: `1px dashed ${INK_LINE}`, color: TEXT_FAINT }} className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-1.5">
-                <Plus size={13} /> {t("composer_add_photo")}
+              <button onClick={() => fileRef.current?.click()} disabled={compressing} style={{ background: INK, border: `1px dashed ${INK_LINE}`, color: TEXT_FAINT }} className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">
+                <Plus size={13} /> {compressing ? "…" : t("composer_add_photo")}
               </button>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />

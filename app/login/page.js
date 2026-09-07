@@ -4,7 +4,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff } from "lucide-react";
+import { Brain, Eye, EyeOff, Globe } from "lucide-react";
+import { useLang } from "../../lib/useLang";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -26,6 +27,7 @@ function LoginForm() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { lang, toggleLang, t } = useLang();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -39,11 +41,11 @@ function LoginForm() {
   useEffect(() => {
     const err = searchParams.get("error");
     if (err === "AccessDenied") {
-      setError("บัญชี Google นี้ยังไม่เคยลงทะเบียน กรุณาสมัครสมาชิกก่อน");
+      setError(t("login_error_access_denied"));
     } else if (err) {
-      setError("เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง");
+      setError(t("login_error_generic"));
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const handleGoogleLogin = () => {
     signIn("google", { callbackUrl: "/dashboard" });
@@ -60,7 +62,7 @@ function LoginForm() {
     });
     setLoading(false);
     if (res?.error) {
-      setError("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือยังไม่ได้สมัครสมาชิก");
+      setError(t("login_error_credentials"));
       return;
     }
     router.replace("/dashboard");
@@ -73,8 +75,17 @@ function LoginForm() {
         minHeight: "100vh",
         fontFamily: "'Noto Sans Thai', sans-serif",
       }}
-      className="w-full flex items-center justify-center px-6 py-12"
+      className="w-full flex items-center justify-center px-6 py-12 relative"
     >
+      <button
+        onClick={toggleLang}
+        style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
+        className="absolute top-5 right-5 flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium"
+        title="Switch language / เปลี่ยนภาษา"
+      >
+        <Globe size={13} /> {lang === "th" ? "TH" : "EN"}
+      </button>
+
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Brain size={22} style={{ color: GOLD }} />
@@ -85,15 +96,15 @@ function LoginForm() {
 
         <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-7">
           <h1 style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER, fontSize: "1.25rem" }} className="mb-1">
-            เข้าสู่ระบบ
+            {t("login_title")}
           </h1>
           <p style={{ color: TEXT_FAINT }} className="mb-6 leading-relaxed text-sm">
-            บันทึกทุกความทรงจำไว้ในที่เดียว เข้าถึงได้จากทุกอุปกรณ์
+            {t("auth_tagline")}
           </p>
 
           <form onSubmit={handleCredentialsLogin} className="flex flex-col gap-3 mb-4">
             <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อผู้ใช้</span>
+              <span style={{ color: TEXT_MUTED }} className="text-xs">{t("username_label")}</span>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -104,7 +115,7 @@ function LoginForm() {
               />
             </label>
             <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">รหัสผ่าน</span>
+              <span style={{ color: TEXT_MUTED }} className="text-xs">{t("password_label")}</span>
               <div className="relative mt-1">
                 <input
                   type={showPw ? "text" : "password"}
@@ -131,13 +142,13 @@ function LoginForm() {
               style={{ background: GOLD, color: INK }}
               className="w-full rounded-lg py-2.5 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {loading ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
+              {loading ? t("login_loading") : t("login_button")}
             </button>
           </form>
 
           <div className="flex items-center gap-3 my-4">
             <div style={{ flex: 1, height: 1, background: INK_LINE }} />
-            <span style={{ color: TEXT_FAINT }} className="text-xs">หรือ</span>
+            <span style={{ color: TEXT_FAINT }} className="text-xs">{t("or_divider")}</span>
             <div style={{ flex: 1, height: 1, background: INK_LINE }} />
           </div>
 
@@ -152,14 +163,14 @@ function LoginForm() {
               <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.4C29.4 34.9 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.4C41.6 35.6 44 30.2 44 24c0-1.3-.1-2.7-.4-3.5z"/>
             </svg>
-            เข้าสู่ระบบด้วย Google
+            {t("google_login_button")}
           </button>
         </div>
 
         <p style={{ color: TEXT_FAINT }} className="text-xs text-center mt-5">
-          ยังไม่มีบัญชี?{" "}
+          {t("no_account_prompt")}{" "}
           <Link href="/signup" style={{ color: GOLD }} className="hover:underline">
-            สมัครสมาชิก
+            {t("signup_link")}
           </Link>
         </p>
       </div>
