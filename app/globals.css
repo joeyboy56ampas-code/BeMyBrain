@@ -7,4 +7,15 @@
 body {
   margin: 0;
   background: #15131F;
+  /* ป้องกันไม่ให้ข้อความทั่วเว็บ (โลโก้ ปุ่ม หัวข้อ ฯลฯ) ถูกเลือก/ขึ้นเคอร์เซอร์พิมพ์
+     เหมือนแอปทั่วไป — ยกเว้นช่องที่พิมพ์ได้จริง (input/textarea) ด้านล่าง */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }

@@ -485,7 +485,7 @@ function EntryCard({ entry, onRequestDelete }) {
         </button>
       )}
       {entry.image && (
-        <img src={entry.image} alt="" className="w-full aspect-[4/3] object-cover rounded-lg mb-1" />
+        <img src={entry.image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg mb-1" />
       )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
       <p className="leading-relaxed">{entry.text}</p>
@@ -546,7 +546,7 @@ function EntryList({ title, entries, onBack, onRequestDelete, t }) {
       </button>
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{title}</h1>
       {entries.length === 0 ? <EmptyState text={t("empty_category")} /> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {entries.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
         </div>
       )}
@@ -629,7 +629,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, t }) {
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <MapPin size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {locations[active].map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
         </div>
       </div>
@@ -667,7 +667,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <Users size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {byPerson(active).map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
         </div>
       </div>
@@ -716,7 +716,7 @@ function SearchView({ query, setQuery, entries, onRequestDelete, t }) {
       </h1>
       {!query.trim() ? <EmptyState text={t("empty_search_prompt")} /> :
         results.length === 0 ? <EmptyState text={t("empty_search_results")} /> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {results.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
         </div>
       )}
@@ -756,7 +756,13 @@ function Composer({ categories, people, onClose, onSave, t }) {
       setNewPerson("");
     }
   };
-  const save = () => { if (!text.trim()) return; onSave({ text: text.trim(), category, date, location: location.trim(), image, people: selectedPeople }); };
+  const save = () => {
+    if (!text.trim()) return;
+    // ถ้าพิมพ์ชื่อคนไว้ในช่องแต่ลืมกด Enter/+ ก่อนกดบันทึก ให้เก็บชื่อนั้นเข้าไปด้วยเสมอ กันข้อมูลตกหล่น
+    const pending = newPerson.trim();
+    const finalPeople = pending && !selectedPeople.includes(pending) ? [...selectedPeople, pending] : selectedPeople;
+    onSave({ text: text.trim(), category, date, location: location.trim(), image, people: finalPeople });
+  };
 
   return (
     <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-end sm:items-center justify-center z-50 sm:p-6">
@@ -792,7 +798,7 @@ function Composer({ categories, people, onClose, onSave, t }) {
             <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> {t("composer_photo")}</div>
             {image ? (
               <div className="relative">
-                <img src={image} alt="" className="w-full aspect-[4/3] object-cover rounded-lg" />
+                <img src={image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg" />
                 <button onClick={() => setImage(null)} style={{ background: INK }} className="absolute top-2 right-2 p-1 rounded-full">
                   <X size={13} style={{ color: PAPER }} />
                 </button>
@@ -812,6 +818,13 @@ function Composer({ categories, people, onClose, onSave, t }) {
                   style={{ background: selectedPeople.includes(p.name) ? SAGE : INK, color: selectedPeople.includes(p.name) ? INK : TEXT_MUTED, border: `1px solid ${selectedPeople.includes(p.name) ? SAGE : INK_LINE}` }}
                   className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
                   {p.favorite && <Star size={9} fill="currentColor" />} {p.name}
+                </button>
+              ))}
+              {selectedPeople.filter((n) => !people.find((p) => p.name === n)).map((n) => (
+                <button key={n} onClick={() => togglePerson(n)}
+                  style={{ background: SAGE, color: INK, border: `1px solid ${SAGE}` }}
+                  className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
+                  {n} <X size={10} />
                 </button>
               ))}
             </div>
