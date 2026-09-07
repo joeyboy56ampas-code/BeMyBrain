@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
   Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
-  ChevronRight, Check, Loader2, Brain, LogOut
+  ChevronRight, Check, Loader2, Brain, LogOut, Trash2
 } from "lucide-react";
 
 const INK = "#15131F";
@@ -112,17 +112,20 @@ export default function Dashboard() {
     );
   };
 
+  // รวมการเพิ่มบันทึกใหม่และเพิ่มรายชื่อคนไว้ในการอัปเดตเดียว แล้วเซฟครั้งเดียว
+  // (เดิมเรียก persist() สองครั้งซ้อนกัน ทำให้เกิด race condition ข้อมูลทับกันจนบันทึกหาย)
   const addEntry = (entry) => {
-    const next = [{ ...entry, id: uid(), createdAt: new Date().toISOString() }, ...entries];
-    setEntries(next);
-    persist(next, people, categories);
-  };
+    const newEntry = { ...entry, id: uid(), createdAt: new Date().toISOString() };
+    const nextEntries = [newEntry, ...entries];
 
-  const upsertPeople = (names) => {
-    let next = [...people];
-    names.forEach((n) => { if (!next.find((p) => p.name === n)) next.push({ name: n, favorite: false }); });
-    setPeople(next);
-    persist(entries, next, categories);
+    let nextPeople = [...people];
+    (entry.people || []).forEach((n) => {
+      if (!nextPeople.find((p) => p.name === n)) nextPeople.push({ name: n, favorite: false });
+    });
+
+    setEntries(nextEntries);
+    setPeople(nextPeople);
+    persist(nextEntries, nextPeople, categories);
   };
 
   const toggleFavorite = (name) => {
@@ -135,6 +138,19 @@ export default function Dashboard() {
     const next = [...categories, { id: uid(), label, icon: "Sparkles" }];
     setCategories(next);
     persist(entries, people, next);
+  };
+
+  // ลบหมวดหมู่ — บันทึกที่เคยอยู่ในหมวดนี้จะถูกย้ายไปหมวดที่เหลืออันแรกแทน (ไม่ลบทิ้ง)
+  // ต้องเหลืออย่างน้อย 1 หมวดเสมอ
+  const deleteCategory = (id) => {
+    if (categories.length <= 1) return;
+    const fallbackId = categories.find((c) => c.id !== id)?.id;
+    const nextCategories = categories.filter((c) => c.id !== id);
+    const nextEntries = entries.map((e) => (e.category === id ? { ...e, category: fallbackId } : e));
+    setCategories(nextCategories);
+    setEntries(nextEntries);
+    persist(nextEntries, people, nextCategories);
+    if (activeFilter === id) setActiveFilter(null);
   };
 
   if (status === "loading" || booting) {
@@ -155,7 +171,7 @@ export default function Dashboard() {
       <Sidebar
         user={user} view={view}
         setView={(v) => { setView(v); setActiveFilter(null); }}
-        categories={categories} onAddCategory={addCategory}
+        categories={categories} onAddCategory={addCategory} onDeleteCategory={deleteCategory}
         entries={entries} saving={saveTick}
       />
       <main className="flex-1 min-w-0 flex flex-col" style={{ maxHeight: "100vh" }}>
@@ -180,7 +196,7 @@ export default function Dashboard() {
         <Composer
           categories={categories} people={people}
           onClose={() => setShowComposer(false)}
-          onSave={(entry) => { addEntry(entry); upsertPeople(entry.people); setShowComposer(false); }}
+          onSave={(entry) => { addEntry(entry); setShowComposer(false); }}
         />
       )}
     </div>
@@ -188,7 +204,7 @@ export default function Dashboard() {
 }
 
 /* ---------------- sidebar / top bar ---------------- */
-function Sidebar({ user, view, setView, categories, onAddCategory, entries, saving }) {
+function Sidebar({ user, view, setView, categories, onAddCategory, onDeleteCategory, entries, saving }) {
   const [addingCat, setAddingCat] = useState(false);
   const [catName, setCatName] = useState("");
   const items = [
@@ -222,14 +238,29 @@ function Sidebar({ user, view, setView, categories, onAddCategory, entries, savi
           const Icon = ICONS[c.icon] || Sparkles;
           const count = entries.filter((e) => e.category === c.id).length;
           return (
-            <button key={c.id} onClick={() => setView("category")} style={{ color: TEXT_MUTED }}
-              className="flex items-center justify-between px-3 py-1.5 rounded-lg text-left hover:bg-white/5">
-              <span className="flex items-center gap-2 truncate">
-                <Icon size={13} style={{ color: TEXT_FAINT }} />
-                <span className="truncate">{c.label}</span>
-              </span>
-              <span style={{ color: TEXT_FAINT }} className="text-xs">{count}</span>
-            </button>
+            <div key={c.id} className="group flex items-center rounded-lg hover:bg-white/5">
+              <button onClick={() => setView("category")} style={{ color: TEXT_MUTED }}
+                className="flex-1 min-w-0 flex items-center justify-between px-3 py-1.5 text-left">
+                <span className="flex items-center gap-2 truncate">
+                  <Icon size={13} style={{ color: TEXT_FAINT }} />
+                  <span className="truncate">{c.label}</span>
+                </span>
+                <span style={{ color: TEXT_FAINT }} className="text-xs ml-2">{count}</span>
+              </button>
+              {categories.length > 1 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`ลบหมวดหมู่ "${c.label}"? บันทึกในหมวดนี้จะถูกย้ายไปหมวดอื่นแทน ไม่ถูกลบทิ้ง`)) {
+                      onDeleteCategory(c.id);
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 pr-2 shrink-0"
+                  title="ลบหมวดหมู่"
+                >
+                  <Trash2 size={13} style={{ color: TEXT_FAINT }} />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>

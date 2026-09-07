@@ -28,13 +28,25 @@ export async function POST(request) {
   const cleanEmail = payload.email.trim().toLowerCase();
   const cleanUsername = username.trim().toLowerCase();
 
-  const { data: existing } = await supabaseAdmin
+  const { data: emailMatch } = await supabaseAdmin
     .from("users")
-    .select("email, username")
-    .or(`username.eq.${cleanUsername},email.eq.${cleanEmail}`)
+    .select("email, username, password_hash")
+    .eq("email", cleanEmail)
     .maybeSingle();
 
-  if (existing) {
+  // อีเมลนี้ลงทะเบียนสมบูรณ์แล้ว (มีรหัสผ่านตั้งไว้แล้ว) -> ห้ามสมัครซ้ำ
+  if (emailMatch && emailMatch.password_hash) {
+    return NextResponse.json({ error: "already_exists" }, { status: 409 });
+  }
+
+  const { data: usernameMatch } = await supabaseAdmin
+    .from("users")
+    .select("email")
+    .eq("username", cleanUsername)
+    .maybeSingle();
+
+  // username นี้ถูกคนอื่น (อีเมลอื่น) ใช้ไปแล้ว -> ห้ามใช้ซ้ำ
+  if (usernameMatch && usernameMatch.email !== cleanEmail) {
     return NextResponse.json({ error: "already_exists" }, { status: 409 });
   }
 
