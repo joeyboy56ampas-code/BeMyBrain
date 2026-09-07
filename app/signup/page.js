@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff } from "lucide-react";
+import { Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
 const INK_LINE = "#2C2A3C";
 const PAPER = "#F6EFE2";
 const GOLD = "#E3A84E";
+const SAGE = "#8FA98C";
 const TEXT_MUTED = "#A9A5BE";
 const TEXT_FAINT = "#726E88";
 
@@ -19,18 +20,55 @@ const ERROR_MESSAGES = {
   password_too_short: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
   already_exists: "ชื่อผู้ใช้หรืออีเมลนี้มีคนใช้แล้ว",
   signup_failed: "สมัครสมาชิกไม่สำเร็จ ลองใหม่อีกครั้ง",
+  google_not_verified: "ยืนยัน Gmail หมดอายุแล้ว กรุณาเชื่อมต่อใหม่",
 };
 
-export default function SignupPage() {
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48">
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 44c5.4 0 10.3-2.1 14-5.5l-6.5-5.4C29.4 34.9 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.4C41.6 35.6 44 30.2 44 24c0-1.3-.1-2.7-.4-3.5z"/>
+    </svg>
+  );
+}
+
+function SignupInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawToken = searchParams.get("verify");
+
+  const [checking, setChecking] = useState(!!rawToken);
+  const [verifiedEmail, setVerifiedEmail] = useState(null);
+  const [tokenError, setTokenError] = useState("");
+
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!rawToken) return;
+    (async () => {
+      const res = await fetch("/api/verify-google-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: rawToken }),
+      });
+      const data = await res.json();
+      setChecking(false);
+      if (!res.ok) {
+        setTokenError(ERROR_MESSAGES[data.error] || "ยืนยัน Gmail ไม่สำเร็จ");
+        return;
+      }
+      setVerifiedEmail(data.email);
+      if (data.name) setName(data.name);
+    })();
+  }, [rawToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,7 +83,7 @@ export default function SignupPage() {
     const res = await fetch("/api/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, username, email, password }),
+      body: JSON.stringify({ token: rawToken, name, username, password }),
     });
     const data = await res.json();
 
@@ -55,7 +93,6 @@ export default function SignupPage() {
       return;
     }
 
-    // สมัครสำเร็จ ล็อกอินให้อัตโนมัติ
     const signInRes = await signIn("credentials", { username, password, redirect: false });
     setLoading(false);
     if (signInRes?.error) {
@@ -87,85 +124,104 @@ export default function SignupPage() {
             สร้างสมองใหม่
           </h1>
           <p style={{ color: TEXT_FAINT }} className="mb-6 leading-relaxed text-sm">
-            สมัครสมาชิกด้วยชื่อผู้ใช้และรหัสผ่านของคุณเอง
+            ทุกบัญชีต้องเชื่อมต่อ Gmail เพื่อยืนยันตัวตน ก่อนตั้งชื่อผู้ใช้และรหัสผ่านของคุณเอง
           </p>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อที่แสดง</span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="เช่น พลอย"
-                style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
-              />
-            </label>
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อผู้ใช้ (username)</span>
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="ใช้เข้าสู่ระบบครั้งถัดไป"
-                style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
-                required
-              />
-            </label>
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">อีเมล</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
-                required
-              />
-            </label>
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</span>
-              <div className="relative mt-1">
+          {checking && (
+            <p style={{ color: TEXT_FAINT }} className="text-sm text-center py-6">กำลังตรวจสอบ…</p>
+          )}
+
+          {!checking && !verifiedEmail && (
+            <div className="flex flex-col gap-3">
+              {tokenError && <p style={{ color: "#E38E8E" }} className="text-xs">{tokenError}</p>}
+              <button
+                onClick={() => signIn("google", { callbackUrl: "/signup" })}
+                style={{ background: GOLD, color: INK }}
+                className="w-full rounded-lg py-2.5 font-medium flex items-center justify-center gap-2 hover:opacity-90"
+              >
+                <GoogleIcon /> เชื่อมต่อ Gmail เพื่อเริ่มลงทะเบียน
+              </button>
+              <p style={{ color: TEXT_FAINT }} className="text-xs text-center leading-relaxed">
+                ระบบจะพาไปยืนยันตัวตนกับ Google ก่อน แล้วค่อยกลับมาตั้งชื่อผู้ใช้และรหัสผ่านที่นี่
+              </p>
+            </div>
+          )}
+
+          {!checking && verifiedEmail && (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <div
+                style={{ background: INK, border: `1px solid ${SAGE}` }}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+              >
+                <CheckCircle2 size={16} style={{ color: SAGE }} />
+                <span style={{ color: PAPER }} className="truncate">{verifiedEmail}</span>
+                <span style={{ color: SAGE }} className="text-xs ml-auto shrink-0">ยืนยันแล้ว</span>
+              </div>
+
+              <label className="block">
+                <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อที่แสดง</span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="เช่น พลอย"
+                  style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                  className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
+                />
+              </label>
+              <label className="block">
+                <span style={{ color: TEXT_MUTED }} className="text-xs">ชื่อผู้ใช้ (username)</span>
+                <input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="ใช้เข้าสู่ระบบครั้งถัดไป"
+                  style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                  className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span style={{ color: TEXT_MUTED }} className="text-xs">รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</span>
+                <div className="relative mt-1">
+                  <input
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                    className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
+                    required
+                    minLength={8}
+                  />
+                  <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
+                    {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+                  </button>
+                </div>
+              </label>
+              <label className="block">
+                <span style={{ color: TEXT_MUTED }} className="text-xs">ยืนยันรหัสผ่าน</span>
                 <input
                   type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
                   placeholder="••••••••"
                   style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                  className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
+                  className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
                   required
-                  minLength={8}
                 />
-                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                  {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                </button>
-              </div>
-            </label>
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">ยืนยันรหัสผ่าน</span>
-              <input
-                type={showPw ? "text" : "password"}
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="••••••••"
-                style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
-                required
-              />
-            </label>
+              </label>
 
-            {error && <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>}
+              {error && <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>}
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ background: GOLD, color: INK }}
-              className="w-full rounded-lg py-2.5 font-medium mt-1 hover:opacity-90 disabled:opacity-60"
-            >
-              {loading ? "กำลังสมัคร…" : "สมัครสมาชิก"}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ background: GOLD, color: INK }}
+                className="w-full rounded-lg py-2.5 font-medium mt-1 hover:opacity-90 disabled:opacity-60"
+              >
+                {loading ? "กำลังสมัคร…" : "ยืนยันการลงทะเบียน"}
+              </button>
+            </form>
+          )}
         </div>
 
         <p style={{ color: TEXT_FAINT }} className="text-xs text-center mt-5">
@@ -176,5 +232,13 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupInner />
+    </Suspense>
   );
 }

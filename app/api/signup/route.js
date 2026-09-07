@@ -1,19 +1,32 @@
 import bcrypt from "bcryptjs";
+import { decode } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 
 export async function POST(request) {
-  const { username, email, password, name } = await request.json();
+  const { token, username, password, name } = await request.json();
 
-  if (!username || !email || !password) {
+  if (!token || !username || !password) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
   if (password.length < 8) {
     return NextResponse.json({ error: "password_too_short" }, { status: 400 });
   }
 
+  // ตรวจโทเค็นยืนยัน Gmail ที่เซ็นด้วย NEXTAUTH_SECRET — เป็นหลักฐานว่าอีเมลนี้
+  // ผ่านการล็อกอิน Google มาจริง ปลอมแปลงไม่ได้ และหมดอายุใน 10 นาที
+  let payload;
+  try {
+    payload = await decode({ token, secret: process.env.NEXTAUTH_SECRET });
+  } catch (e) {
+    payload = null;
+  }
+  if (!payload || payload.purpose !== "google_verify" || !payload.email) {
+    return NextResponse.json({ error: "google_not_verified" }, { status: 400 });
+  }
+
+  const cleanEmail = payload.email.trim().toLowerCase();
   const cleanUsername = username.trim().toLowerCase();
-  const cleanEmail = email.trim().toLowerCase();
 
   const { data: existing } = await supabaseAdmin
     .from("users")
@@ -27,18 +40,21 @@ export async function POST(request) {
 
   const password_hash = await bcrypt.hash(password, 10);
 
-  const { error } = await supabaseAdmin.from("users").insert({
-    email: cleanEmail,
-    username: cleanUsername,
-    name: name?.trim() || cleanUsername,
-    password_hash,
-    last_login: new Date().toISOString(),
-  });
+  const { error } = await supabaseAdmin.from("users").upsert(
+    {
+      email: cleanEmail,
+      username: cleanUsername,
+      name: name?.trim() || payload.name || cleanUsername,
+      password_hash,
+      last_login: new Date().toISOString(),
+    },
+    { onConflict: "email" }
+  );
 
   if (error) {
     console.error("signup insert error", error);
     return NextResponse.json({ error: "signup_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, username: cleanUsername });
 }

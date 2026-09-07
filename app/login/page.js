@@ -1,8 +1,8 @@
 "use client";
 
 import { signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { Brain, Eye, EyeOff } from "lucide-react";
 
@@ -15,8 +15,17 @@ const TEXT_MUTED = "#A9A5BE";
 const TEXT_FAINT = "#726E88";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const { status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -26,6 +35,19 @@ export default function LoginPage() {
   useEffect(() => {
     if (status === "authenticated") router.replace("/dashboard");
   }, [status, router]);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err === "AccessDenied") {
+      setError("บัญชี Google นี้ยังไม่เคยลงทะเบียน กรุณาสมัครสมาชิกก่อน");
+    } else if (err) {
+      setError("เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
+  }, [searchParams]);
+
+  const handleGoogleLogin = () => {
+    signIn("google", { callbackUrl: "/dashboard" });
+  };
 
   const handleCredentialsLogin = async (e) => {
     e.preventDefault();
@@ -120,7 +142,7 @@ export default function LoginPage() {
           </div>
 
           <button
-            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+            onClick={handleGoogleLogin}
             style={{ background: "transparent", border: `1px solid ${INK_LINE}`, color: PAPER }}
             className="w-full rounded-lg py-2.5 font-medium flex items-center justify-center gap-2 hover:bg-white/5"
           >
