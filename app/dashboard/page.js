@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
   Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
-  ChevronRight, Check, Loader2, Brain, LogOut, Trash2
+  ChevronRight, Check, Loader2, Brain, LogOut, Trash2, Settings2, Globe
 } from "lucide-react";
+import { makeT } from "../../lib/i18n";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import ManageCategoriesModal from "../../components/ManageCategoriesModal";
+import MobileNav from "../../components/MobileNav";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -86,12 +90,30 @@ export default function Dashboard() {
   const [activeFilter, setActiveFilter] = useState(null);
   const [galleryMode, setGalleryMode] = useState("timeline");
   const [showComposer, setShowComposer] = useState(false);
+  const [showManageCategories, setShowManageCategories] = useState(false);
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
+  const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
+  const [lang, setLang] = useState("th");
+
+  const t = makeT(lang);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("bemybrain_lang");
+      if (saved === "en" || saved === "th") setLang(saved);
+    } catch (e) {}
+  }, []);
+
+  const toggleLang = () => {
+    const next = lang === "th" ? "en" : "th";
+    setLang(next);
+    try { window.localStorage.setItem("bemybrain_lang", next); } catch (e) {}
+  };
 
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;
@@ -128,6 +150,12 @@ export default function Dashboard() {
     persist(nextEntries, nextPeople, categories);
   };
 
+  const deleteEntry = (id) => {
+    const nextEntries = entries.filter((e) => e.id !== id);
+    setEntries(nextEntries);
+    persist(nextEntries, people, categories);
+  };
+
   const toggleFavorite = (name) => {
     const next = people.map((p) => (p.name === name ? { ...p, favorite: !p.favorite } : p));
     setPeople(next);
@@ -140,13 +168,17 @@ export default function Dashboard() {
     persist(entries, people, next);
   };
 
-  // ลบหมวดหมู่ — บันทึกที่เคยอยู่ในหมวดนี้จะถูกย้ายไปหมวดที่เหลืออันแรกแทน (ไม่ลบทิ้ง)
-  // ต้องเหลืออย่างน้อย 1 หมวดเสมอ
+  const renameCategory = (id, label) => {
+    const next = categories.map((c) => (c.id === id ? { ...c, label } : c));
+    setCategories(next);
+    persist(entries, people, next);
+  };
+
+  // ลบหมวดหมู่ — ตามที่ตกลง: ความทรงจำในหมวดนี้จะถูกลบไปด้วย (มีคำเตือนใน modal ก่อนเสมอ)
   const deleteCategory = (id) => {
     if (categories.length <= 1) return;
-    const fallbackId = categories.find((c) => c.id !== id)?.id;
     const nextCategories = categories.filter((c) => c.id !== id);
-    const nextEntries = entries.map((e) => (e.category === id ? { ...e, category: fallbackId } : e));
+    const nextEntries = entries.filter((e) => e.category !== id);
     setCategories(nextCategories);
     setEntries(nextEntries);
     persist(nextEntries, people, nextCategories);
@@ -171,50 +203,91 @@ export default function Dashboard() {
       <Sidebar
         user={user} view={view}
         setView={(v) => { setView(v); setActiveFilter(null); }}
-        categories={categories} onAddCategory={addCategory} onDeleteCategory={deleteCategory}
-        entries={entries} saving={saveTick}
+        onOpenCategory={(id) => { setView("category"); setActiveFilter(id); }}
+        categories={categories} saving={saveTick} t={t}
+        onManageCategories={() => setShowManageCategories(true)}
       />
       <main className="flex-1 min-w-0 flex flex-col" style={{ maxHeight: "100vh" }}>
-        <TopBar query={query} setQuery={setQuery} onSearch={() => setView("search")} onCompose={() => setShowComposer(true)} />
-        <div className="flex-1 overflow-y-auto px-8 pb-10">
+        <TopBar
+          query={query} setQuery={setQuery} onSearch={() => setView("search")} onCompose={() => setShowComposer(true)}
+          lang={lang} onToggleLang={toggleLang} t={t}
+          onManageCategories={() => setShowManageCategories(true)}
+          onLogout={() => signOut({ callbackUrl: "/login" })}
+        />
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-24 md:pb-10">
           {view === "category" && !activeFilter && (
-            <CategoryGrid categories={categories} entries={entries} onOpen={(id) => setActiveFilter(id)} />
+            <CategoryGrid categories={categories} entries={entries} onOpen={(id) => setActiveFilter(id)} t={t} />
           )}
           {view === "category" && activeFilter && (
             <EntryList title={categories.find((c) => c.id === activeFilter)?.label}
-              entries={entries.filter((e) => e.category === activeFilter)} onBack={() => setActiveFilter(null)} />
+              entries={entries.filter((e) => e.category === activeFilter)} onBack={() => setActiveFilter(null)}
+              onRequestDelete={setPendingDeleteEntry} t={t} />
           )}
-          {view === "timeline" && <TimelineGallery entries={entries} mode={galleryMode} setMode={setGalleryMode} />}
-          {view === "location" && <LocationView entries={entries} active={activeFilter} onOpen={setActiveFilter} />}
+          {view === "timeline" && (
+            <TimelineGallery entries={entries} mode={galleryMode} setMode={setGalleryMode}
+              onRequestDelete={setPendingDeleteEntry} t={t} />
+          )}
+          {view === "location" && (
+            <LocationView entries={entries} active={activeFilter} onOpen={setActiveFilter}
+              onRequestDelete={setPendingDeleteEntry} t={t} />
+          )}
           {view === "people" && (
-            <PeopleView people={people} entries={entries} active={activeFilter} onOpen={setActiveFilter} onToggleFavorite={toggleFavorite} />
+            <PeopleView people={people} entries={entries} active={activeFilter} onOpen={setActiveFilter}
+              onToggleFavorite={toggleFavorite} onRequestDelete={setPendingDeleteEntry} t={t} />
           )}
-          {view === "search" && <SearchView query={query} setQuery={setQuery} entries={entries} />}
+          {view === "search" && (
+            <SearchView query={query} setQuery={setQuery} entries={entries} onRequestDelete={setPendingDeleteEntry} t={t} />
+          )}
         </div>
       </main>
+
+      <MobileNav view={view === "category" && activeFilter ? "category" : view} setView={(v) => { setView(v); setActiveFilter(null); }} t={t} onCompose={() => setShowComposer(true)} />
+
       {showComposer && (
         <Composer
-          categories={categories} people={people}
+          categories={categories} people={people} t={t}
           onClose={() => setShowComposer(false)}
           onSave={(entry) => { addEntry(entry); setShowComposer(false); }}
         />
       )}
+
+      <ManageCategoriesModal
+        open={showManageCategories}
+        onClose={() => setShowManageCategories(false)}
+        categories={categories}
+        entries={entries}
+        t={t}
+        onAdd={addCategory}
+        onRename={renameCategory}
+        onDelete={deleteCategory}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDeleteEntry}
+        title={t("delete_memory_title")}
+        body={t("delete_memory_body")}
+        confirmLabel={t("delete_memory_confirm")}
+        cancelLabel={t("cancel")}
+        onCancel={() => setPendingDeleteEntry(null)}
+        onConfirm={() => {
+          deleteEntry(pendingDeleteEntry.id);
+          setPendingDeleteEntry(null);
+        }}
+      />
     </div>
   );
 }
 
 /* ---------------- sidebar / top bar ---------------- */
-function Sidebar({ user, view, setView, categories, onAddCategory, onDeleteCategory, entries, saving }) {
-  const [addingCat, setAddingCat] = useState(false);
-  const [catName, setCatName] = useState("");
+function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, onManageCategories }) {
   const items = [
-    { id: "category", label: "หมวดหมู่", icon: LayoutGrid },
-    { id: "timeline", label: "Timeline", icon: Rows },
-    { id: "location", label: "สถานที่", icon: MapPin },
-    { id: "people", label: "บุคคล", icon: Users },
+    { id: "category", label: t("nav_categories"), icon: LayoutGrid },
+    { id: "timeline", label: t("nav_timeline"), icon: Rows },
+    { id: "location", label: t("nav_locations"), icon: MapPin },
+    { id: "people", label: t("nav_people"), icon: Users },
   ];
   return (
-    <aside style={{ background: INK_SOFT, borderRight: `1px solid ${INK_LINE}`, width: "232px" }} className="shrink-0 flex flex-col py-6 px-4">
+    <aside style={{ background: INK_SOFT, borderRight: `1px solid ${INK_LINE}`, width: "232px" }} className="hidden md:flex shrink-0 flex-col py-6 px-4">
       <div className="flex items-center gap-2 px-2 mb-8">
         <Brain size={18} style={{ color: GOLD }} />
         <span style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.05rem" }}>BeMyBrain</span>
@@ -232,57 +305,26 @@ function Sidebar({ user, view, setView, categories, onAddCategory, onDeleteCateg
           );
         })}
       </nav>
-      <div style={{ color: TEXT_FAINT }} className="px-3 text-xs uppercase tracking-wide mb-2">หมวดหมู่ของฉัน</div>
+      <div style={{ color: TEXT_FAINT }} className="px-3 text-xs uppercase tracking-wide mb-2">{t("categories_title")}</div>
       <div className="flex flex-col gap-0.5 mb-3 overflow-y-auto">
         {categories.map((c) => {
           const Icon = ICONS[c.icon] || Sparkles;
-          const count = entries.filter((e) => e.category === c.id).length;
           return (
-            <div key={c.id} className="group flex items-center rounded-lg hover:bg-white/5">
-              <button onClick={() => setView("category")} style={{ color: TEXT_MUTED }}
-                className="flex-1 min-w-0 flex items-center justify-between px-3 py-1.5 text-left">
-                <span className="flex items-center gap-2 truncate">
-                  <Icon size={13} style={{ color: TEXT_FAINT }} />
-                  <span className="truncate">{c.label}</span>
-                </span>
-                <span style={{ color: TEXT_FAINT }} className="text-xs ml-2">{count}</span>
-              </button>
-              {categories.length > 1 && (
-                <button
-                  onClick={() => {
-                    if (window.confirm(`ลบหมวดหมู่ "${c.label}"? บันทึกในหมวดนี้จะถูกย้ายไปหมวดอื่นแทน ไม่ถูกลบทิ้ง`)) {
-                      onDeleteCategory(c.id);
-                    }
-                  }}
-                  className="opacity-0 group-hover:opacity-100 pr-2 shrink-0"
-                  title="ลบหมวดหมู่"
-                >
-                  <Trash2 size={13} style={{ color: TEXT_FAINT }} />
-                </button>
-              )}
-            </div>
+            <button key={c.id} onClick={() => onOpenCategory(c.id)} style={{ color: TEXT_MUTED }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-white/5">
+              <Icon size={13} style={{ color: TEXT_FAINT }} />
+              <span className="truncate">{c.label}</span>
+            </button>
           );
         })}
       </div>
-      {addingCat ? (
-        <div className="px-2 flex gap-1">
-          <input autoFocus value={catName} onChange={(e) => setCatName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && catName.trim()) { onAddCategory(catName.trim()); setCatName(""); setAddingCat(false); }
-              if (e.key === "Escape") setAddingCat(false);
-            }}
-            placeholder="ชื่อหัวข้อใหม่" style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-            className="w-full rounded-md px-2 py-1 text-xs outline-none" />
-        </div>
-      ) : (
-        <button onClick={() => setAddingCat(true)} style={{ color: TEXT_FAINT }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs">
-          <Plus size={12} /> เพิ่มหัวข้อ
-        </button>
-      )}
+      <button onClick={onManageCategories} style={{ color: TEXT_FAINT }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs hover:text-white">
+        <Settings2 size={12} /> {t("manage_categories")}
+      </button>
       <div className="flex-1" />
       <div className="px-3 flex items-center gap-2 mb-2">
         <span style={{ width: 6, height: 6, borderRadius: 999, background: saving ? GOLD : SAGE, opacity: saving ? 1 : 0.6 }} />
-        <span style={{ color: TEXT_FAINT }} className="text-xs">{saving ? "กำลังบันทึก…" : "บันทึกอัตโนมัติแล้ว"}</span>
+        <span style={{ color: TEXT_FAINT }} className="text-xs">{saving ? t("saving") : t("saved")}</span>
       </div>
       <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3 px-2 flex items-center gap-2">
         {user.image ? (
@@ -296,7 +338,7 @@ function Sidebar({ user, view, setView, categories, onAddCategory, onDeleteCateg
           <div style={{ color: PAPER }} className="text-xs truncate">{user.name}</div>
           <div style={{ color: TEXT_FAINT }} className="text-xs truncate">{user.email}</div>
         </div>
-        <button onClick={() => signOut({ callbackUrl: "/login" })} title="ออกจากระบบ">
+        <button onClick={() => signOut({ callbackUrl: "/login" })} title={t("logout")}>
           <LogOut size={14} style={{ color: TEXT_FAINT }} />
         </button>
       </div>
@@ -304,26 +346,63 @@ function Sidebar({ user, view, setView, categories, onAddCategory, onDeleteCateg
   );
 }
 
-function TopBar({ query, setQuery, onSearch, onCompose }) {
+function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, onManageCategories, onLogout }) {
   return (
-    <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-3 px-8 py-4">
-      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="flex-1 flex items-center gap-2 rounded-full px-4 py-2">
-        <Search size={15} style={{ color: TEXT_FAINT }} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSearch()}
-          placeholder="ค้นหาความทรงจำ ชื่อคน สถานที่ หรือโปรเจค…" style={{ background: "transparent", color: PAPER }}
-          className="flex-1 outline-none text-sm" />
+    <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-8 py-4">
+      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="flex-1 flex items-center gap-2 rounded-full px-4 py-2 min-w-0">
+        <Search size={15} style={{ color: TEXT_FAINT }} className="shrink-0" />
+        <input
+          value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSearch()}
+          placeholder={t("search_placeholder")} style={{ background: "transparent", color: PAPER }}
+          className="flex-1 min-w-0 outline-none text-sm" />
       </div>
-      <button onClick={onCompose} style={{ background: GOLD, color: INK }} className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium">
-        <Plus size={15} /> บันทึกใหม่
+
+      <button
+        onClick={onToggleLang}
+        style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
+        className="shrink-0 flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium"
+        title="Switch language / เปลี่ยนภาษา"
+      >
+        <Globe size={13} /> {lang === "th" ? "TH" : "EN"}
+      </button>
+
+      <button onClick={onManageCategories} className="md:hidden shrink-0 rounded-full p-2" style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} title={t("manage_categories")}>
+        <Settings2 size={15} style={{ color: TEXT_MUTED }} />
+      </button>
+
+      <button onClick={onLogout} className="md:hidden shrink-0 rounded-full p-2" style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} title={t("logout")}>
+        <LogOut size={15} style={{ color: TEXT_MUTED }} />
+      </button>
+
+      <button
+        onClick={onCompose}
+        style={{ background: GOLD, color: INK }}
+        className="hidden md:flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium hover:opacity-90"
+      >
+        <Plus size={15} /> {t("new_memory")}
       </button>
     </div>
   );
 }
 
-function EntryCard({ entry }) {
+/* ---------------- entry card ---------------- */
+
+function EntryCard({ entry, onRequestDelete }) {
   return (
-    <div style={{ background: PAPER, color: INK }} className="rounded-xl p-4 shadow-lg flex flex-col gap-2">
-      {entry.image && <img src={entry.image} alt="" className="w-full h-40 object-cover rounded-lg mb-1" />}
+    <div style={{ background: PAPER, color: INK }} className="group relative rounded-xl p-4 shadow-lg flex flex-col gap-2">
+      {onRequestDelete && (
+        <button
+          onClick={() => onRequestDelete(entry)}
+          style={{ background: "rgba(21,19,31,0.75)" }}
+          className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full z-10"
+          title="Delete"
+        >
+          <Trash2 size={13} style={{ color: PAPER }} />
+        </button>
+      )}
+      {entry.image && (
+        <img src={entry.image} alt="" className="w-full h-40 object-cover rounded-lg mb-1" />
+      )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
       <p className="leading-relaxed">{entry.text}</p>
       <div className="flex flex-wrap gap-2 mt-1">
@@ -351,11 +430,11 @@ function EmptyState({ text }) {
   );
 }
 
-function CategoryGrid({ categories, entries, onOpen }) {
+function CategoryGrid({ categories, entries, onOpen, t }) {
   return (
     <div className="pt-8">
-      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">หมวดหมู่</h1>
-      <div className="grid grid-cols-3 gap-4">
+      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("categories_title")}</h1>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {categories.map((c) => {
           const Icon = ICONS[c.icon] || Sparkles;
           const count = entries.filter((e) => e.category === c.id).length;
@@ -365,7 +444,7 @@ function CategoryGrid({ categories, entries, onOpen }) {
               <Icon size={20} style={{ color: GOLD }} />
               <div>
                 <div style={{ color: PAPER }} className="mb-0.5">{c.label}</div>
-                <div style={{ color: TEXT_FAINT }} className="text-xs">{count} บันทึก</div>
+                <div style={{ color: TEXT_FAINT }} className="text-xs">{t("memory_count", count)}</div>
               </div>
             </button>
           );
@@ -375,59 +454,72 @@ function CategoryGrid({ categories, entries, onOpen }) {
   );
 }
 
-function EntryList({ title, entries, onBack }) {
+function EntryList({ title, entries, onBack, onRequestDelete, t }) {
   return (
     <div className="pt-8">
       <button onClick={onBack} style={{ color: TEXT_FAINT }} className="flex items-center gap-1 text-xs mb-4">
-        <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> กลับไปหมวดหมู่ทั้งหมด
+        <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> {t("back_to_categories")}
       </button>
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{title}</h1>
-      {entries.length === 0 ? <EmptyState text="ยังไม่มีบันทึกในหัวข้อนี้" /> : (
-        <div className="grid grid-cols-2 gap-4">{entries.map((e) => <EntryCard key={e.id} entry={e} />)}</div>
+      {entries.length === 0 ? <EmptyState text={t("empty_category")} /> : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {entries.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+        </div>
       )}
     </div>
   );
 }
 
-function TimelineGallery({ entries, mode, setMode }) {
+function TimelineGallery({ entries, mode, setMode, onRequestDelete, t }) {
   const grouped = useMemo(() => {
     const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
     const map = {};
     sorted.forEach((e) => { const k = monthKey(e.date); if (!map[k]) map[k] = []; map[k].push(e); });
     return map;
   }, [entries]);
+
   return (
     <div className="pt-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }}>Timeline ความทรงจำ</h1>
+        <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }}>{t("timeline_title")}</h1>
         <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="flex rounded-full p-1">
           <button onClick={() => setMode("timeline")} style={{ background: mode === "timeline" ? INK_LINE : "transparent", color: mode === "timeline" ? PAPER : TEXT_FAINT }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs">
-            <Rows size={13} /> Timeline
+            <Rows size={13} /> {t("view_timeline")}
           </button>
           <button onClick={() => setMode("grid")} style={{ background: mode === "grid" ? INK_LINE : "transparent", color: mode === "grid" ? PAPER : TEXT_FAINT }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs">
-            <LayoutGrid size={13} /> อัลบั้ม
+            <LayoutGrid size={13} /> {t("view_album")}
           </button>
         </div>
       </div>
-      {entries.length === 0 && <EmptyState text="ยังไม่มีความทรงจำถูกบันทึกไว้" />}
+      {entries.length === 0 && <EmptyState text={t("empty_timeline")} />}
       {mode === "timeline" && Object.entries(grouped).map(([month, list]) => (
         <div key={month} className="mb-8">
           <div style={{ color: GOLD }} className="text-xs mb-3">{month}</div>
           <div className="flex flex-col gap-3 pl-4" style={{ borderLeft: `1px solid ${INK_LINE}` }}>
-            {list.map((e) => <EntryCard key={e.id} entry={e} />)}
+            {list.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
           </div>
         </div>
       ))}
       {mode === "grid" && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).map((e) => (
-            <div key={e.id} style={{ background: PAPER }} className="rounded-lg overflow-hidden aspect-square relative group">
+            <div key={e.id} style={{ background: PAPER }} className="group relative rounded-lg overflow-hidden aspect-square">
+              {onRequestDelete && (
+                <button
+                  onClick={() => onRequestDelete(e)}
+                  style={{ background: "rgba(21,19,31,0.75)" }}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full z-10"
+                  title="Delete"
+                >
+                  <Trash2 size={12} style={{ color: PAPER }} />
+                </button>
+              )}
               {e.image ? <img src={e.image} alt="" className="w-full h-full object-cover" /> : (
                 <div className="w-full h-full flex items-center justify-center p-3">
                   <span style={{ color: INK }} className="text-xs line-clamp-4">{e.text}</span>
                 </div>
               )}
-              <div style={{ background: "linear-gradient(to top, rgba(0,0,0,.65), transparent 50%)" }} className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div style={{ background: "linear-gradient(to top, rgba(0,0,0,.65), transparent 50%)" }} className="absolute inset-0 flex items-end p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <span className="text-white text-xs">{fmtDate(e.date)}</span>
               </div>
             </div>
@@ -438,7 +530,7 @@ function TimelineGallery({ entries, mode, setMode }) {
   );
 }
 
-function LocationView({ entries, active, onOpen }) {
+function LocationView({ entries, active, onOpen, onRequestDelete, t }) {
   const locations = useMemo(() => {
     const map = {};
     entries.forEach((e) => { if (!e.location) return; if (!map[e.location]) map[e.location] = []; map[e.location].push(e); });
@@ -448,27 +540,29 @@ function LocationView({ entries, active, onOpen }) {
     return (
       <div className="pt-8">
         <button onClick={() => onOpen(null)} style={{ color: TEXT_FAINT }} className="flex items-center gap-1 text-xs mb-4">
-          <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> กลับไปสถานที่ทั้งหมด
+          <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> {t("back_to_locations")}
         </button>
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <MapPin size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-2 gap-4">{locations[active].map((e) => <EntryCard key={e.id} entry={e} />)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {locations[active].map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+        </div>
       </div>
     );
   }
   const keys = Object.keys(locations);
   return (
     <div className="pt-8">
-      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">สถานที่</h1>
-      {keys.length === 0 ? <EmptyState text="ยังไม่มีบันทึกที่ระบุสถานที่" /> : (
-        <div className="grid grid-cols-3 gap-4">
+      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("locations_title")}</h1>
+      {keys.length === 0 ? <EmptyState text={t("empty_locations")} /> : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {keys.map((loc) => (
             <button key={loc} onClick={() => onOpen(loc)} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 text-left flex flex-col gap-4">
               <MapPin size={20} style={{ color: GOLD }} />
               <div>
                 <div style={{ color: PAPER }} className="mb-0.5">{loc}</div>
-                <div style={{ color: TEXT_FAINT }} className="text-xs">{locations[loc].length} บันทึก</div>
+                <div style={{ color: TEXT_FAINT }} className="text-xs">{t("memory_count", locations[loc].length)}</div>
               </div>
             </button>
           ))}
@@ -478,27 +572,29 @@ function LocationView({ entries, active, onOpen }) {
   );
 }
 
-function PeopleView({ people, entries, active, onOpen, onToggleFavorite }) {
+function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onRequestDelete, t }) {
   const byPerson = (name) => entries.filter((e) => (e.people || []).includes(name));
   if (active) {
     return (
       <div className="pt-8">
         <button onClick={() => onOpen(null)} style={{ color: TEXT_FAINT }} className="flex items-center gap-1 text-xs mb-4">
-          <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> กลับไปบุคคลทั้งหมด
+          <ChevronRight size={12} style={{ transform: "rotate(180deg)" }} /> {t("back_to_people")}
         </button>
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <Users size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-2 gap-4">{byPerson(active).map((e) => <EntryCard key={e.id} entry={e} />)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {byPerson(active).map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+        </div>
       </div>
     );
   }
   const sorted = [...people].sort((a, b) => (b.favorite - a.favorite));
   return (
     <div className="pt-8">
-      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">บุคคล</h1>
-      {sorted.length === 0 ? <EmptyState text="ยังไม่มีบุคคลถูกบันทึกไว้" /> : (
-        <div className="grid grid-cols-3 gap-4">
+      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("people_title")}</h1>
+      {sorted.length === 0 ? <EmptyState text={t("empty_people")} /> : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {sorted.map((p) => (
             <div key={p.name} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 flex flex-col gap-4">
               <div className="flex items-start justify-between">
@@ -509,7 +605,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite }) {
               </div>
               <button onClick={() => onOpen(p.name)} className="text-left">
                 <div style={{ color: PAPER }} className="mb-0.5">{p.name}</div>
-                <div style={{ color: TEXT_FAINT }} className="text-xs">{byPerson(p.name).length} บันทึกร่วมกัน</div>
+                <div style={{ color: TEXT_FAINT }} className="text-xs">{t("together_count", byPerson(p.name).length)}</div>
               </button>
             </div>
           ))}
@@ -519,7 +615,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite }) {
   );
 }
 
-function SearchView({ query, setQuery, entries }) {
+function SearchView({ query, setQuery, entries, onRequestDelete, t }) {
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
@@ -532,17 +628,19 @@ function SearchView({ query, setQuery, entries }) {
   return (
     <div className="pt-8">
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">
-        ผลการค้นหา {query && <span style={{ color: TEXT_FAINT, fontSize: "0.9rem" }}>สำหรับ "{query}"</span>}
+        {t("search_results_title")} {query && <span style={{ color: TEXT_FAINT, fontSize: "0.9rem" }}>{t("search_results_for", query)}</span>}
       </h1>
-      {!query.trim() ? <EmptyState text="พิมพ์คำค้นหาด้านบนเพื่อเริ่มค้นหา" /> :
-        results.length === 0 ? <EmptyState text="ไม่พบบันทึกที่เกี่ยวข้อง" /> : (
-        <div className="grid grid-cols-2 gap-4">{results.map((e) => <EntryCard key={e.id} entry={e} />)}</div>
+      {!query.trim() ? <EmptyState text={t("empty_search_prompt")} /> :
+        results.length === 0 ? <EmptyState text={t("empty_search_results")} /> : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {results.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+        </div>
       )}
     </div>
   );
 }
 
-function Composer({ categories, people, onClose, onSave }) {
+function Composer({ categories, people, onClose, onSave, t }) {
   const [text, setText] = useState("");
   const [category, setCategory] = useState(categories[categories.length - 1]?.id || categories[0].id);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -561,20 +659,26 @@ function Composer({ categories, people, onClose, onSave }) {
     reader.readAsDataURL(f);
   };
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
+  const addTypedPerson = () => {
+    if (newPerson.trim()) {
+      togglePerson(newPerson.trim());
+      setNewPerson("");
+    }
+  };
   const save = () => { if (!text.trim()) return; onSave({ text: text.trim(), category, date, location: location.trim(), image, people: selectedPeople }); };
 
   return (
-    <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-center justify-center z-50 p-6">
-      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "85vh" }} className="w-full max-w-lg rounded-2xl flex flex-col overflow-hidden">
+    <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-end sm:items-center justify-center z-50 sm:p-6">
+      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "90vh" }} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
         <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">
-          <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">บันทึกความทรงจำใหม่</span>
+          <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">{t("composer_title")}</span>
           <button onClick={onClose}><X size={18} style={{ color: TEXT_FAINT }} /></button>
         </div>
         <div className="overflow-y-auto px-5 py-4 flex flex-col gap-4">
-          <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="วันนี้เกิดอะไรขึ้นบ้าง…" rows={4}
+          <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t("composer_placeholder")} rows={4}
             style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-2.5 outline-none resize-none leading-relaxed" />
           <div>
-            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5">หัวข้อ</div>
+            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5">{t("composer_topic")}</div>
             <div className="flex flex-wrap gap-1.5">
               {categories.map((c) => (
                 <button key={c.id} onClick={() => setCategory(c.id)}
@@ -583,18 +687,18 @@ function Composer({ categories, people, onClose, onSave }) {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block">
-              <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><Calendar size={12} /> วันที่</div>
+              <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><Calendar size={12} /> {t("composer_date")}</div>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-2 outline-none text-sm" />
             </label>
             <label className="block">
-              <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><MapPin size={12} /> สถานที่</div>
-              <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ชื่อร้าน / สถานที่" style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-2 outline-none text-sm" />
+              <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><MapPin size={12} /> {t("composer_location")}</div>
+              <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("composer_location_ph")} style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-2 outline-none text-sm" />
             </label>
           </div>
           <div>
-            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> รูปภาพ</div>
+            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> {t("composer_photo")}</div>
             {image ? (
               <div className="relative">
                 <img src={image} alt="" className="w-full h-32 object-cover rounded-lg" />
@@ -604,13 +708,13 @@ function Composer({ categories, people, onClose, onSave }) {
               </div>
             ) : (
               <button onClick={() => fileRef.current?.click()} style={{ background: INK, border: `1px dashed ${INK_LINE}`, color: TEXT_FAINT }} className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-1.5">
-                <Plus size={13} /> แนบรูป
+                <Plus size={13} /> {t("composer_add_photo")}
               </button>
             )}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
           </div>
           <div>
-            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><Users size={12} /> บุคคลที่เกี่ยวข้อง</div>
+            <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><Users size={12} /> {t("composer_people")}</div>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {[...favorites, ...others].map((p) => (
                 <button key={p.name} onClick={() => togglePerson(p.name)}
@@ -620,15 +724,20 @@ function Composer({ categories, people, onClose, onSave }) {
                 </button>
               ))}
             </div>
-            <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && newPerson.trim()) { togglePerson(newPerson.trim()); setNewPerson(""); } }}
-              placeholder="เพิ่มชื่อใหม่แล้วกด Enter" style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-1.5 outline-none text-xs" />
+            <div className="flex gap-1.5">
+              <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTypedPerson(); } }}
+                placeholder={t("composer_add_person_ph")} style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="flex-1 min-w-0 rounded-lg px-3 py-1.5 outline-none text-xs" />
+              <button type="button" onClick={addTypedPerson} style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="shrink-0 rounded-lg px-3 py-1.5">
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
         </div>
         <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="px-5 py-4 flex justify-end gap-2">
-          <button onClick={onClose} style={{ color: TEXT_MUTED }} className="text-sm px-4 py-2">ยกเลิก</button>
+          <button onClick={onClose} style={{ color: TEXT_MUTED }} className="text-sm px-4 py-2">{t("composer_cancel")}</button>
           <button onClick={save} disabled={!text.trim()} style={{ background: text.trim() ? GOLD : INK_LINE, color: text.trim() ? INK : TEXT_FAINT }} className="text-sm px-4 py-2 rounded-lg font-medium flex items-center gap-1.5">
-            <Check size={14} /> บันทึก
+            <Check size={14} /> {t("composer_save")}
           </button>
         </div>
       </div>
