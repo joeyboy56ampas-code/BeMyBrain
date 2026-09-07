@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
   Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
@@ -25,7 +24,7 @@ const FONT_BODY = "'Noto Sans Thai', sans-serif";
 
 const DEFAULT_CATEGORIES = [
   { id: "work", label: "งาน", icon: "Briefcase" },
-  { id: "love", label: "ความสัมพันธ์กับคนรัก", icon: "Heart" },
+  { id: "love", label: "ความสัมพันธ์", icon: "Heart" },
   { id: "health", label: "สุขภาพ", icon: "Activity" },
   { id: "family", label: "ครอบครัว", icon: "Home" },
   { id: "general", label: "ทั่วไป", icon: "Sparkles" },
@@ -45,26 +44,34 @@ const monthKey = (iso) => {
   return `${months[d.getMonth()]} ${d.getFullYear() + 543}`;
 };
 
-/* ---------- Supabase persistence: one JSON blob per user ---------- */
-async function loadBundle(email) {
-  const { data, error } = await supabase
-    .from("brain_data")
-    .select("payload")
-    .eq("user_email", email)
-    .maybeSingle();
-  if (error || !data) return { entries: [], people: [], categories: DEFAULT_CATEGORIES };
-  return {
-    entries: data.payload?.entries || [],
-    people: data.payload?.people || [],
-    categories: data.payload?.categories || DEFAULT_CATEGORIES,
-  };
+/* ---------- persistence via our own server API (not direct Supabase from browser) ---------- */
+async function loadBundle() {
+  try {
+    const res = await fetch("/api/data");
+    if (!res.ok) return { entries: [], people: [], categories: DEFAULT_CATEGORIES };
+    const data = await res.json();
+    return {
+      entries: data.entries || [],
+      people: data.people || [],
+      categories: data.categories || DEFAULT_CATEGORIES,
+    };
+  } catch (e) {
+    console.error("load failed", e);
+    return { entries: [], people: [], categories: DEFAULT_CATEGORIES };
+  }
 }
 
-async function saveBundle(email, entries, people, categories) {
-  await supabase.from("brain_data").upsert(
-    { user_email: email, payload: { entries, people, categories }, updated_at: new Date().toISOString() },
-    { onConflict: "user_email" }
-  );
+async function saveBundle(entries, people, categories) {
+  try {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, people, categories }),
+    });
+    if (!res.ok) console.error("save failed", await res.text());
+  } catch (e) {
+    console.error("save failed", e);
+  }
 }
 
 export default function Dashboard() {
@@ -89,7 +96,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;
     (async () => {
-      const data = await loadBundle(session.user.email);
+      const data = await loadBundle();
       setEntries(data.entries);
       setPeople(data.people);
       setCategories(data.categories);
@@ -100,7 +107,7 @@ export default function Dashboard() {
   const persist = (nextEntries, nextPeople, nextCategories) => {
     if (!session?.user?.email) return;
     setSaveTick(true);
-    saveBundle(session.user.email, nextEntries, nextPeople, nextCategories).finally(() =>
+    saveBundle(nextEntries, nextPeople, nextCategories).finally(() =>
       setTimeout(() => setSaveTick(false), 700)
     );
   };

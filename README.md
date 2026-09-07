@@ -1,20 +1,30 @@
 # BeMyBrain
 
-เว็บสมองที่สอง — จดบันทึกความทรงจำ พร้อมล็อกอินด้วย Google จริง และเก็บข้อมูลใน Supabase
+เว็บสมองที่สอง — จดบันทึกความทรงจำ พร้อมล็อกอินด้วย Google หรือ ชื่อผู้ใช้/รหัสผ่าน
 
-## ขั้นตอนติดตั้ง (ทำตามลำดับ)
+## สิ่งที่เปลี่ยนไปจากเวอร์ชันแรก
+- เพิ่มการล็อกอินด้วย username/password (มีหน้าสมัครสมาชิกแยก) นอกเหนือจาก Google
+- ย้ายการอ่าน/บันทึกข้อมูลไปทำฝั่งเซิร์ฟเวอร์ทั้งหมด (ผ่าน `/api/data`) แทนที่จะเรียก Supabase ตรงจากเบราว์เซอร์ — ปลอดภัยกว่ามาก และแก้ปัญหาข้อมูลไม่ถูกบันทึก
+- ใช้ Supabase **service_role key** (สิทธิ์เต็ม ฝั่งเซิร์ฟเวอร์เท่านั้น) แทน anon key ที่เคยฝังในโค้ดฝั่งเบราว์เซอร์
 
-### 1. เตรียมตาราง Supabase
-ไปที่ Supabase Dashboard ของโปรเจกต์คุณ → เมนูซ้าย "SQL Editor" → "New query"
-วางโค้ดนี้แล้วกด "Run":
+## ขั้นตอนติดตั้ง
+
+### 1. อัปเดตตาราง Supabase
+ไปที่ Supabase Dashboard → SQL Editor → New query แล้วรันคำสั่งนี้ (ถ้าเคยรันเวอร์ชันเก่าไปแล้ว รันซ้ำได้ ไม่มีผลเสีย):
 
 ```sql
 create table if not exists users (
   email text primary key,
+  username text unique,
   name text,
   avatar_url text,
+  password_hash text,
   last_login timestamptz
 );
+
+-- ถ้าตาราง users มีอยู่แล้วจากเวอร์ชันก่อน ให้รันสองบรรทัดนี้เพิ่ม
+alter table users add column if not exists username text unique;
+alter table users add column if not exists password_hash text;
 
 create table if not exists brain_data (
   user_email text primary key references users(email),
@@ -23,38 +33,30 @@ create table if not exists brain_data (
 );
 ```
 
-### 2. อัปโหลดโค้ดนี้ขึ้น GitHub
-1. ไปที่ github.com → กด "+" มุมขวาบน → "New repository"
-2. ตั้งชื่อ repo ว่า `bemybrain` แล้วกด "Create repository"
-3. ในหน้า repo ที่ว่างเปล่า จะมีลิงก์ "uploading an existing file" กดลิงก์นั้น
-4. ลากโฟลเดอร์ทั้งหมด (ทุกไฟล์ในนี้) ไปวางในหน้าเว็บ รอจนอัปโหลดครบ
-5. เลื่อนลงล่าง กด "Commit changes"
+### 2. เตรียม Environment Variables
+ตอนนี้ต้องใช้ **service_role key** แทน anon key:
+1. ไปที่ Supabase → Project Settings → API
+2. คัดลอกค่าในช่อง **"service_role"** (ไม่ใช่ "anon public" แบบเดิม — สังเกตคำเตือนสีแดงว่าเป็นคีย์ลับ)
+3. ตั้งชื่อตัวแปรใน Vercel ว่า `SUPABASE_SERVICE_ROLE_KEY`
 
-### 3. Import เข้า Vercel
-1. ไปที่ vercel.com → "Add New" → "Project"
-2. เลือก repo `bemybrain` → "Import"
-3. ก่อนกด Deploy ใส่ Environment Variables ต่อไปนี้ (ค่าที่มี `=` ว่างให้คุณเติมเอง):
+ตัวแปรทั้งหมดที่ต้องมีใน Vercel → Settings → Environment Variables:
 
 ```
-GOOGLE_CLIENT_ID=<Client ID จาก Google Cloud>
-GOOGLE_CLIENT_SECRET=<Client Secret จาก Google Cloud>
-NEXT_PUBLIC_SUPABASE_URL=<Project URL จาก Supabase>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key จาก Supabase>
-NEXTAUTH_SECRET=<สุ่มจาก https://generate-secret.vercel.app/32>
-NEXTAUTH_URL=<จะรู้หลัง deploy ครั้งแรก ใส่ทีหลังได้>
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXT_PUBLIC_SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=https://<ลิงก์เว็บของคุณ>
 ```
 
-4. กด "Deploy" รอ 1-2 นาที จะได้ลิงก์เว็บ เช่น `https://bemybrain.vercel.app`
+ลบตัวแปร `NEXT_PUBLIC_SUPABASE_ANON_KEY` เก่าออกได้เลยถ้ามีอยู่ ไม่ใช้แล้ว
 
-### 4. เติม NEXTAUTH_URL และ Redirect URI
-1. กลับไป Vercel → Settings → Environment Variables → เพิ่ม `NEXTAUTH_URL` เป็นลิงก์เว็บที่ได้ (เช่น `https://bemybrain.vercel.app`) → Save → ไปที่ "Deployments" กด "Redeploy" ล่าสุดอีกครั้ง
-2. ไปที่ Google Cloud Console → Credentials → เปิด OAuth Client ID ที่สร้างไว้
-3. ในช่อง "Authorized redirect URIs" กด "Add URI" ใส่:
-   `https://bemybrain.vercel.app/api/auth/callback/google`
-4. กด Save
+### 3. อัปโหลดขึ้น GitHub
+แนะนำให้ใช้ **GitHub Desktop** (ก็อปไฟล์ทั้งหมดทับลงในโฟลเดอร์ local repo เดิม แล้ว commit + push) แม่นยำกว่าการลากอัปโหลดผ่านเว็บ
 
-### 5. ทดสอบ
-เปิดลิงก์เว็บของคุณ กด "เข้าสู่ระบบด้วย Google" ควรล็อกอินได้จริงและเข้าหน้า dashboard
+### 4. Deploy
+Vercel จะ deploy ให้อัตโนมัติเมื่อ push ขึ้น GitHub (auto-deploy) ไม่ต้องกดอะไรเพิ่ม
 
 ---
-หมายเหตุ: ข้อมูลบันทึกทั้งหมดเก็บใน Supabase ผูกกับอีเมล Google ของแต่ละคน ไม่ได้แชร์ข้ามบัญชี
+หมายเหตุด้านความปลอดภัย: รหัสผ่านที่ผู้ใช้ตั้งจะถูกเข้ารหัสด้วย bcrypt ก่อนบันทึกเสมอ ไม่มีการเก็บรหัสผ่านตัวจริงไว้ที่ไหนเลย
