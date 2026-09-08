@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, MapPin, Loader2, LogOut,
+  ChevronRight, MapPin, Users, Loader2, LogOut,
 } from "lucide-react";
 
 const BG = "#050805";
@@ -351,6 +351,9 @@ export default function AdminPage() {
                       <div style={{ color: GREEN }} className="text-xs whitespace-pre-wrap break-words">{e.text}</div>
                       <div className="flex gap-2 mt-1" style={{ color: TEXT_DIM }}>
                         {e.location && <span className="flex items-center gap-1 text-xs"><MapPin size={10} /> {e.location}</span>}
+                        {(e.people || []).map((p) => (
+                          <span key={p} className="flex items-center gap-1 text-xs"><Users size={10} /> {p}</span>
+                        ))}
                       </div>
                     </div>
                     <button onClick={() => setPendingDeleteEntry(e.id)} className="shrink-0">
