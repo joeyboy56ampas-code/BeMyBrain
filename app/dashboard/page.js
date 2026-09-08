@@ -55,6 +55,41 @@ const monthKey = (iso) => {
 // บีบอัดรูปก่อนเก็บ (resize ด้านยาวสุดไม่เกิน 1600px + แปลงเป็น JPEG คุณภาพ 80%)
 // เพราะรูปถูกเก็บเป็น base64 ปนอยู่ใน Supabase database (จำกัดที่ 500MB บนแพลนฟรี)
 // ลดขนาดตรงนี้ช่วยยืดอายุพื้นที่เก็บข้อมูลได้มาก
+// บีบอัดรูปแล้วคืนเป็น Blob (สำหรับอัปโหลดขึ้น Storage) — เล็กกว่า base64 ~33%
+function compressImageToBlob(file, maxDimension = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error("compression failed"))),
+          "image/jpeg",
+          quality
+        );
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function compressImage(file, maxDimension = 1600, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -96,26 +131,30 @@ async function loadBundle() {
       entries: data.entries || [],
       people: data.people || [],
       categories: data.categories || DEFAULT_CATEGORIES,
+      updatedAt: data.updatedAt || null,
     };
   } catch (e) {
     console.error("load failed", e);
-    return { entries: [], people: [], categories: DEFAULT_CATEGORIES };
+    return { entries: [], people: [], categories: DEFAULT_CATEGORIES, updatedAt: null };
   }
 }
 
-async function saveBundle(entries, people, categories) {
+async function saveBundle(entries, people, categories, baseUpdatedAt) {
   try {
     const res = await fetch("/api/data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries, people, categories }),
+      body: JSON.stringify({ entries, people, categories, baseUpdatedAt }),
     });
     if (!res.ok) {
-      // 413 = payload ใหญ่เกินลิมิต 4.5MB ของ Vercel (สาเหตุที่พบบ่อยที่สุดคือรูปเยอะเกินไป)
+      // 413 = payload ใหญ่เกินลิมิต 4.5MB ของ Vercel
       if (res.status === 413) return { ok: false, reason: "too_large" };
+      // 409 = อีกเครื่องเซฟแซงไปแล้ว ห้ามทับ
+      if (res.status === 409) return { ok: false, reason: "conflict" };
       return { ok: false, reason: "failed" };
     }
-    return { ok: true };
+    const data = await res.json();
+    return { ok: true, updatedAt: data.updatedAt };
   } catch (e) {
     return { ok: false, reason: "offline" };
   }
@@ -160,6 +199,7 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const dataVersion = useRef(null);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
@@ -179,6 +219,7 @@ export default function Dashboard() {
       setEntries(data.entries);
       setPeople(data.people);
       setCategories(data.categories);
+      dataVersion.current = data.updatedAt;
       setBooting(false);
     })();
   }, [status, session]);
@@ -197,11 +238,15 @@ export default function Dashboard() {
     if (!session?.user?.email) return;
     setSaveTick(true);
     setSaveError("");
-    saveBundle(nextEntries, nextPeople, nextCategories).then((result) => {
+    saveBundle(nextEntries, nextPeople, nextCategories, dataVersion.current).then((result) => {
       setTimeout(() => setSaveTick(false), 700);
       // สำคัญ: ต้องบอก user เสมอถ้าเซฟไม่สำเร็จ ห้ามเงียบเด็ดขาด
       // (ของเดิมกลืน error ทิ้งแล้วยังโชว์ว่า "บันทึกแล้ว" ทำให้ข้อมูลหายโดยไม่รู้ตัว)
-      if (!result.ok) setSaveError(result.reason);
+      if (!result.ok) {
+        setSaveError(result.reason);
+      } else {
+        dataVersion.current = result.updatedAt;
+      }
     });
   };
 
@@ -352,7 +397,7 @@ export default function Dashboard() {
         {saveError && (
           <div style={{ background: "#3A1F1F", borderBottom: "1px solid #E38E8E" }} className="px-4 sm:px-8 py-3">
             <p style={{ color: "#E38E8E" }} className="text-xs leading-relaxed">
-              {saveError === "too_large" ? t("save_failed_too_large") : saveError === "offline" ? t("save_failed_offline") : t("save_failed_generic")}
+              {saveError === "too_large" ? t("save_failed_too_large") : saveError === "offline" ? t("save_failed_offline") : saveError === "conflict" ? t("save_failed_conflict") : t("save_failed_generic")}
             </p>
           </div>
         )}
@@ -963,6 +1008,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
   const [selectedPeople, setSelectedPeople] = useState(initialEntry?.people || []);
   const [newPerson, setNewPerson] = useState("");
   const [compressing, setCompressing] = useState(false);
+  const [imageError, setImageError] = useState("");
   const fileRef = useRef(null);
   const favorites = [...people].filter((p) => p.favorite);
   const others = [...people].filter((p) => !p.favorite);
@@ -970,11 +1016,22 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
   const handleFile = async (f) => {
     if (!f) return;
     setCompressing(true);
+    setImageError("");
     try {
-      const compressed = await compressImage(f);
-      setImage(compressed);
+      // บีบอัดก่อน แล้วอัปโหลดขึ้น Supabase Storage ทันที เก็บแค่ URL ไว้ใน payload
+      // ทำให้ payload เล็กมากตลอดไป ไม่ชนเพดาน 4.5MB ไม่ว่าจะมีรูปกี่ใบ
+      const compressedBlob = await compressImageToBlob(f);
+      const formData = new FormData();
+      formData.append("file", compressedBlob, "photo.jpg");
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        setImageError(t("photo_upload_failed"));
+        return;
+      }
+      const data = await res.json();
+      setImage(data.url);
     } catch (e) {
-      console.error("image compression failed", e);
+      setImageError(t("photo_upload_failed"));
     } finally {
       setCompressing(false);
     }
@@ -1054,9 +1111,10 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
               </div>
             ) : (
               <button onClick={() => fileRef.current?.click()} disabled={compressing} style={{ background: INK, border: `1px dashed ${INK_LINE}`, color: TEXT_FAINT }} className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">
-                <Plus size={13} /> {compressing ? "…" : t("composer_add_photo")}
+                <Plus size={13} /> {compressing ? t("photo_uploading") : t("composer_add_photo")}
               </button>
             )}
+            {imageError && <p style={{ color: "#E38E8E" }} className="text-xs mt-1.5">{imageError}</p>}
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
           </div>
           <div>

@@ -38,7 +38,49 @@ create table if not exists presence (
   user_email text primary key references users(email),
   last_seen timestamptz
 );
+
+-- SQL function สำหรับหน้า Admin: คำนวณขนาด/จำนวนให้ที่ฝั่งฐานข้อมูลเลย
+-- (แทนการดึง payload ของทุกคนมาคำนวณฝั่ง server ซึ่งกินแบนด์วิดท์มหาศาลตอน auto-refresh)
+create or replace function admin_brain_stats()
+returns table (
+  user_email text,
+  size_bytes bigint,
+  entry_count bigint,
+  people_count bigint,
+  category_count bigint,
+  photo_count bigint,
+  updated_at timestamptz
+)
+language sql
+security definer
+as $$
+  select
+    b.user_email,
+    length(b.payload::text)::bigint as size_bytes,
+    coalesce(jsonb_array_length(b.payload->'entries'), 0)::bigint as entry_count,
+    coalesce(jsonb_array_length(b.payload->'people'), 0)::bigint as people_count,
+    coalesce(jsonb_array_length(b.payload->'categories'), 0)::bigint as category_count,
+    (
+      select count(*)
+      from jsonb_array_elements(coalesce(b.payload->'entries', '[]'::jsonb)) e
+      where e->>'image' is not null and e->>'image' <> ''
+    )::bigint as photo_count,
+    b.updated_at
+  from brain_data b;
+$$;
 ```
+
+### 1.1 สร้าง Storage bucket สำหรับเก็บรูป (สำคัญมาก)
+
+รูปภาพถูกย้ายจากการเก็บเป็น base64 ในฐานข้อมูล ไปเก็บใน Supabase Storage แทน
+เพื่อไม่ให้ชนเพดาน 4.5MB ของ Vercel และไม่กินโควต้า 500MB ของฐานข้อมูล
+
+1. ไปที่ Supabase Dashboard → เมนูซ้าย **Storage** → กด **New bucket**
+2. ตั้งชื่อ bucket ว่า **`memory-photos`** (ต้องตรงเป๊ะ)
+3. ติ๊ก **Public bucket** ให้เป็น public (เพื่อให้เว็บแสดงรูปได้)
+4. กด **Create bucket**
+
+หมายเหตุ: รูปเก่าที่เคยอัปโหลดไว้แบบ base64 จะยังแสดงได้ตามปกติ ไม่ต้องย้าย
 
 ### 2. เตรียม Environment Variables
 ตอนนี้ต้องใช้ **service_role key** แทน anon key:

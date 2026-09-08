@@ -15,21 +15,23 @@ export async function GET() {
     return NextResponse.json({ error: "load_failed" }, { status: 500 });
   }
 
-  const { data: brainRows, error: brainError } = await supabaseAdmin
-    .from("brain_data")
-    .select("user_email, payload, updated_at");
+  // ใช้ SQL function คำนวณขนาด/จำนวนให้ที่ฝั่งฐานข้อมูล แล้วส่งกลับมาแค่ตัวเลข
+  // (ของเดิมดึง payload ของทุกคนรวมรูป base64 ทั้งหมดมาคำนวณฝั่ง server ทุก ๆ 5 วิ
+  //  ซึ่งกินแบนด์วิดท์มหาศาลและช้าลงเรื่อย ๆ ตามจำนวนข้อมูล)
+  const { data: statsRows, error: brainError } = await supabaseAdmin.rpc("admin_brain_stats");
 
   if (brainError) {
-    return NextResponse.json({ error: "load_failed" }, { status: 500 });
+    console.error("stats rpc failed", brainError);
+    return NextResponse.json({ error: "load_failed", detail: brainError.message }, { status: 500 });
   }
 
   const { data: presenceRows } = await supabaseAdmin
     .from("presence")
     .select("user_email, last_seen");
 
-  const brainByEmail = {};
-  brainRows.forEach((row) => {
-    brainByEmail[row.user_email] = row;
+  const statsByEmail = {};
+  (statsRows || []).forEach((row) => {
+    statsByEmail[row.user_email] = row;
   });
 
   const presenceByEmail = {};
@@ -43,12 +45,8 @@ export async function GET() {
   const now = Date.now();
 
   const result = users.map((u) => {
-    const row = brainByEmail[u.email];
-    const payloadStr = row ? JSON.stringify(row.payload || {}) : "";
-    const sizeBytes = Buffer.byteLength(payloadStr, "utf8");
-    const entries = row?.payload?.entries || [];
-    const people = row?.payload?.people || [];
-    const categories = row?.payload?.categories || [];
+    const stats = statsByEmail[u.email];
+    const sizeBytes = Number(stats?.size_bytes || 0);
     const lastSeenMs = presenceByEmail[u.email] ? new Date(presenceByEmail[u.email]).getTime() : null;
     const lastLoginMs = u.last_login ? new Date(u.last_login).getTime() : null;
     // "last seen" ใช้ค่าที่ใหม่กว่าจริงระหว่าง heartbeat ล่าสุด กับเวลา login ล่าสุด
@@ -63,10 +61,11 @@ export async function GET() {
       lastSeen: lastSeenIso,
       recentlyActive: lastSeenMs ? now - lastSeenMs < ACTIVE_WINDOW_MS : false,
       sizeBytes,
-      entryCount: entries.length,
-      peopleCount: people.length,
-      categoryCount: categories.length,
-      photoCount: entries.filter((e) => e.image).length,
+      entryCount: Number(stats?.entry_count || 0),
+      peopleCount: Number(stats?.people_count || 0),
+      categoryCount: Number(stats?.category_count || 0),
+      photoCount: Number(stats?.photo_count || 0),
+      updatedAt: stats?.updated_at || null,
     };
   });
 

@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from("brain_data")
-    .select("payload")
+    .select("payload, updated_at")
     .eq("user_email", session.user.email)
     .maybeSingle();
 
@@ -24,6 +24,7 @@ export async function GET() {
     entries: data?.payload?.entries || [],
     people: data?.payload?.people || [],
     categories: data?.payload?.categories || null,
+    updatedAt: data?.updated_at || null,
   });
 }
 
@@ -34,13 +35,30 @@ export async function POST(request) {
   }
 
   const body = await request.json();
-  const { entries, people, categories } = body;
+  const { entries, people, categories, baseUpdatedAt } = body;
 
+  // ป้องกันข้อมูลทับกันเมื่อเปิดหลายเครื่องพร้อมกัน (optimistic locking)
+  // ถ้าในฐานข้อมูลถูกแก้ไปแล้วหลังจากที่เครื่องนี้โหลดข้อมูลมา แปลว่าอีกเครื่องเซฟแซงไป
+  // ต้องปฏิเสธไว้ก่อน ไม่งั้นข้อมูลของอีกเครื่องจะหายทั้งหมดโดยไม่มีใครรู้
+  const { data: current } = await supabaseAdmin
+    .from("brain_data")
+    .select("updated_at")
+    .eq("user_email", session.user.email)
+    .maybeSingle();
+
+  if (current?.updated_at && baseUpdatedAt && current.updated_at !== baseUpdatedAt) {
+    return NextResponse.json(
+      { error: "conflict", serverUpdatedAt: current.updated_at },
+      { status: 409 }
+    );
+  }
+
+  const nextUpdatedAt = new Date().toISOString();
   const { error } = await supabaseAdmin.from("brain_data").upsert(
     {
       user_email: session.user.email,
       payload: { entries, people, categories },
-      updated_at: new Date().toISOString(),
+      updated_at: nextUpdatedAt,
     },
     { onConflict: "user_email" }
   );
@@ -50,5 +68,5 @@ export async function POST(request) {
     return NextResponse.json({ error: "save_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, updatedAt: nextUpdatedAt });
 }

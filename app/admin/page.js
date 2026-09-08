@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, MapPin, Loader2, LogOut,
+  ChevronRight, MapPin, Loader2, LogOut, Search, Brain,
 } from "lucide-react";
 
 const BG = "#050805";
@@ -56,6 +56,8 @@ export default function AdminPage() {
   const [wipeText, setWipeText] = useState("");
   const [wiping, setWiping] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("lastSeen"); // lastSeen | size | memories | name
   const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
@@ -187,6 +189,24 @@ export default function AdminPage() {
 
   const totalSize = users.reduce((sum, u) => sum + u.sizeBytes, 0);
   const activeNow = users.filter((u) => u.recentlyActive).length;
+  const totalMemories = users.reduce((sum, u) => sum + u.entryCount, 0);
+  const totalPhotos = users.reduce((sum, u) => sum + u.photoCount, 0);
+  const activeUsers = users.filter((u) => u.recentlyActive);
+
+  const visibleUsers = users
+    .filter((u) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (u.name || "").toLowerCase().includes(q) ||
+             (u.username || "").toLowerCase().includes(q) ||
+             (u.email || "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (sortBy === "size") return b.sizeBytes - a.sizeBytes;
+      if (sortBy === "memories") return b.entryCount - a.entryCount;
+      if (sortBy === "name") return (a.name || a.username || "").localeCompare(b.name || b.username || "");
+      return new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0);
+    });
 
   if (status === "loading" || status === "unauthenticated") {
     return <div style={{ background: BG, minHeight: "100vh" }} />;
@@ -197,6 +217,10 @@ export default function AdminPage() {
       <style>{`
         @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
         .admin-cursor { animation: blink 1s step-start infinite; }
+        @keyframes pulse-bg { 0%, 100% { opacity: 0.04; } 50% { opacity: 0.12; } }
+        .admin-pulse { animation: pulse-bg 2.5s ease-in-out infinite; }
+        @keyframes row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        .admin-row { animation: row-in 0.25s ease-out both; }
       `}</style>
 
       {phase === "checking" && (
@@ -251,24 +275,70 @@ export default function AdminPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1" style={{ color: TEXT_DIM }}>
-                <Users size={13} /> <span className="text-xs">registered accounts</span>
+                <Users size={13} /> <span className="text-xs">accounts</span>
               </div>
               <div style={{ color: GREEN }} className="text-2xl">{users.length}</div>
             </div>
             <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1" style={{ color: TEXT_DIM }}>
-                <HardDrive size={13} /> <span className="text-xs">total storage used</span>
+                <HardDrive size={13} /> <span className="text-xs">database size</span>
               </div>
               <div style={{ color: GREEN }} className="text-2xl">{formatBytes(totalSize)}</div>
+              <div style={{ color: TEXT_DIM }} className="text-[10px] mt-1">{totalPhotos} photos in storage</div>
             </div>
             <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1" style={{ color: TEXT_DIM }}>
+                <Brain size={13} /> <span className="text-xs">memories</span>
+              </div>
+              <div style={{ color: GREEN }} className="text-2xl">{totalMemories}</div>
+            </div>
+            <div style={{ background: PANEL, border: `1px solid ${activeNow ? GREEN : LINE}` }} className="rounded-lg p-4 relative overflow-hidden">
+              {activeNow > 0 && <div className="admin-pulse" style={{ position: "absolute", inset: 0, background: GREEN, opacity: 0.06 }} />}
+              <div className="flex items-center gap-2 mb-1 relative" style={{ color: TEXT_DIM }}>
                 <Activity size={13} /> <span className="text-xs">active now</span>
               </div>
-              <div style={{ color: GREEN }} className="text-2xl">{activeNow}</div>
+              <div style={{ color: GREEN }} className="text-2xl relative">{activeNow}</div>
+              {activeUsers.length > 0 && (
+                <div style={{ color: GREEN }} className="text-[10px] mt-1 truncate relative">
+                  {activeUsers.map((u) => u.name || u.username).join(", ")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="flex-1 flex items-center gap-2 rounded-lg px-3 py-2">
+              <Search size={14} style={{ color: TEXT_DIM }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="filter by name, username, or email…"
+                style={{ background: "transparent", color: GREEN }}
+                className="flex-1 min-w-0 outline-none text-xs"
+              />
+              {search && (
+                <button onClick={() => setSearch("")}><X size={13} style={{ color: TEXT_DIM }} /></button>
+              )}
+            </div>
+            <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="flex rounded-lg p-1 shrink-0">
+              {[
+                { id: "lastSeen", label: "recent" },
+                { id: "size", label: "size" },
+                { id: "memories", label: "memories" },
+                { id: "name", label: "name" },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSortBy(s.id)}
+                  style={{ background: sortBy === s.id ? LINE : "transparent", color: sortBy === s.id ? GREEN : TEXT_DIM }}
+                  className="px-3 py-1 rounded text-xs"
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -286,10 +356,12 @@ export default function AdminPage() {
               <div className="col-span-3">last seen</div>
               <div className="col-span-1"></div>
             </div>
-            {users.length === 0 && (
-              <div style={{ color: TEXT_DIM }} className="px-4 py-6 text-center text-xs">no registered users</div>
+            {visibleUsers.length === 0 && (
+              <div style={{ color: TEXT_DIM }} className="px-4 py-6 text-center text-xs">
+                {users.length === 0 ? "no registered users" : "no users match that filter"}
+              </div>
             )}
-            {users.map((u) => (
+            {visibleUsers.map((u) => (
               <button
                 key={u.email}
                 onClick={() => openUser(u.email)}
@@ -304,7 +376,10 @@ export default function AdminPage() {
                   <div style={{ color: TEXT_DIM }} className="text-xs truncate">{u.email}</div>
                 </div>
                 <div className="col-span-2 text-xs">{formatBytes(u.sizeBytes)}</div>
-                <div className="col-span-2 text-xs">{u.entryCount}</div>
+                <div className="col-span-2 text-xs">
+                  {u.entryCount}
+                  {u.photoCount > 0 && <span style={{ color: TEXT_DIM }}> · {u.photoCount}📷</span>}
+                </div>
                 <div className="col-span-3 text-xs" style={{ color: TEXT_DIM }}>{timeAgo(u.lastSeen)}</div>
                 <div className="col-span-1 flex justify-end">
                   <ChevronRight size={14} />
