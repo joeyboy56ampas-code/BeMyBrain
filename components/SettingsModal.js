@@ -28,6 +28,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -37,6 +38,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
     setName(user?.name || "");
     setNewPassword("");
     setConfirmPassword("");
+    setChangingPassword(false);
     setError("");
     setSaved(false);
     (async () => {
@@ -56,7 +58,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
     setError("");
     setSaved(false);
 
-    if (newPassword || confirmPassword) {
+    if (changingPassword) {
       if (newPassword.length < 8) {
         setError("New password must be at least 8 characters.");
         return;
@@ -74,7 +76,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
       body: JSON.stringify({
         name,
         username,
-        newPassword: newPassword || undefined,
+        newPassword: changingPassword ? newPassword : undefined,
       }),
     });
     const data = await res.json();
@@ -91,6 +93,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
     }
     setNewPassword("");
     setConfirmPassword("");
+    setChangingPassword(false);
     setSaved(true);
   };
 
@@ -150,43 +153,63 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
             </label>
 
             <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3">
-              <div className="flex flex-col gap-2">
-                <label className="block">
-                  <span style={{ color: TEXT_MUTED }} className="text-xs">New password</span>
-                  <div className="relative mt-1">
-                    <input
-                      type={showPw ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="At least 8 characters"
-                      style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                      className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                    />
-                    <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                      {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+              {!changingPassword ? (
+                <button
+                  type="button"
+                  onClick={() => setChangingPassword(true)}
+                  style={{ color: GOLD }}
+                  className="text-xs hover:underline"
+                >
+                  Change password
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span style={{ color: TEXT_MUTED }} className="text-xs">Change password</span>
+                    <button
+                      type="button"
+                      onClick={() => { setChangingPassword(false); setNewPassword(""); setConfirmPassword(""); }}
+                      style={{ color: TEXT_FAINT }}
+                      className="text-xs hover:text-white"
+                    >
+                      Cancel
                     </button>
                   </div>
-                </label>
-                <label className="block">
-                  <span style={{ color: TEXT_MUTED }} className="text-xs">Confirm new password</span>
-                  <div className="relative mt-1">
-                    <input
-                      type={showConfirmPw ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter new password"
-                      style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                      className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                    />
-                    <button type="button" onClick={() => setShowConfirmPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                      {showConfirmPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                    </button>
-                  </div>
-                </label>
-                <p style={{ color: TEXT_FAINT }} className="text-xs leading-relaxed">
-                  Leave both blank to keep your current password.
-                </p>
-              </div>
+                  <label className="block">
+                    <span style={{ color: TEXT_MUTED }} className="text-xs">New password</span>
+                    <div className="relative mt-1">
+                      <input
+                        autoFocus
+                        type={showPw ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                        className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
+                      />
+                      <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
+                        {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+                      </button>
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span style={{ color: TEXT_MUTED }} className="text-xs">Confirm new password</span>
+                    <div className="relative mt-1">
+                      <input
+                        type={showConfirmPw ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                        style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                        className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
+                      />
+                      <button type="button" onClick={() => setShowConfirmPw((v) => !v)} className="absolute right-2.5 top-2.5">
+                        {showConfirmPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
 
             {error && <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>}
