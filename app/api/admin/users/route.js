@@ -9,8 +9,7 @@ export async function GET() {
 
   const { data: users, error: usersError } = await supabaseAdmin
     .from("users")
-    .select("email, username, name, avatar_url, last_login")
-    .order("last_login", { ascending: false });
+    .select("email, username, name, avatar_url, last_login");
 
   if (usersError) {
     return NextResponse.json({ error: "load_failed" }, { status: 500 });
@@ -51,12 +50,17 @@ export async function GET() {
     const people = row?.payload?.people || [];
     const categories = row?.payload?.categories || [];
     const lastSeenMs = presenceByEmail[u.email] ? new Date(presenceByEmail[u.email]).getTime() : null;
+    const lastLoginMs = u.last_login ? new Date(u.last_login).getTime() : null;
+    // "last seen" ใช้ค่าที่ใหม่กว่าจริงระหว่าง heartbeat ล่าสุด กับเวลา login ล่าสุด
+    // (heartbeat จะแม่นกว่าเสมอถ้ากำลังเปิดแอปอยู่ ไม่ใช่แค่ตอน login ครั้งเดียว)
+    const lastSeenIso =
+      lastSeenMs && (!lastLoginMs || lastSeenMs > lastLoginMs) ? presenceByEmail[u.email] : u.last_login;
     return {
       email: u.email,
       username: u.username,
       name: u.name,
       avatarUrl: u.avatar_url,
-      lastLogin: u.last_login,
+      lastSeen: lastSeenIso,
       recentlyActive: lastSeenMs ? now - lastSeenMs < ACTIVE_WINDOW_MS : false,
       sizeBytes,
       entryCount: entries.length,
@@ -65,6 +69,8 @@ export async function GET() {
       photoCount: entries.filter((e) => e.image).length,
     };
   });
+
+  result.sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0));
 
   return NextResponse.json({ users: result });
 }

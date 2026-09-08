@@ -305,7 +305,7 @@ export default function AdminPage() {
                 </div>
                 <div className="col-span-2 text-xs">{formatBytes(u.sizeBytes)}</div>
                 <div className="col-span-2 text-xs">{u.entryCount}</div>
-                <div className="col-span-3 text-xs" style={{ color: TEXT_DIM }}>{timeAgo(u.lastLogin)}</div>
+                <div className="col-span-3 text-xs" style={{ color: TEXT_DIM }}>{timeAgo(u.lastSeen)}</div>
                 <div className="col-span-1 flex justify-end">
                   <ChevronRight size={14} />
                 </div>
