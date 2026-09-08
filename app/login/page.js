@@ -65,7 +65,9 @@ function LoginForm() {
       setError(t("login_error_credentials"));
       return;
     }
-    router.replace(username.trim().toLowerCase() === "admin" ? "/admin" : "/dashboard");
+    // ไม่ redirect เองตรงนี้ — ปล่อยให้ useEffect ด้านบนที่ดู session จัดการแทนที่เดียว
+    // (กันปัญหา race condition ที่เคยเกิด: redirect สองจุดแข่งกัน จุดที่สอง
+    // อ่าน session ก่อนอัปเดตครบ เลยพาไปหน้าไม่ตรงที่ควรจะเป็น)
   };
 
   return (

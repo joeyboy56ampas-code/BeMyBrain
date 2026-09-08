@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, Image as ImageIcon, MapPin, Loader2, LogOut,
+  ChevronRight, MapPin, Loader2, LogOut,
 } from "lucide-react";
 
 const BG = "#050805";
@@ -50,11 +50,13 @@ export default function AdminPage() {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [wipeText, setWipeText] = useState("");
   const [wiping, setWiping] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -95,9 +97,19 @@ export default function AdminPage() {
   const openUser = async (email) => {
     setSelectedEmail(email);
     setDetail(null);
+    setDetailError("");
     setDetailLoading(true);
-    const res = await fetch(`/api/admin/users/${encodeURIComponent(email)}`);
-    if (res.ok) setDetail(await res.json());
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(email)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDetailError(data.error === "not_found" ? "User not found." : `Couldn't load this account (${res.status}).`);
+      } else {
+        setDetail(await res.json());
+      }
+    } catch (e) {
+      setDetailError("Network error while loading this account.");
+    }
     setDetailLoading(false);
   };
 
@@ -318,18 +330,26 @@ export default function AdminPage() {
               <div style={{ color: GREEN }} className="p-8 flex justify-center"><Loader2 className="animate-spin" size={18} /></div>
             )}
 
+            {detailError && !detailLoading && (
+              <div style={{ color: RED }} className="p-6 text-xs text-center">{detailError}</div>
+            )}
+
             {detail && !detailLoading && (
               <div className="overflow-y-auto px-5 py-4 flex flex-col gap-2">
                 {detail.entries.length === 0 && (
                   <p style={{ color: TEXT_DIM }} className="text-xs text-center py-4">no memories</p>
                 )}
                 {detail.entries.map((e) => (
-                  <div key={e.id} style={{ background: BG, border: `1px solid ${LINE}` }} className="rounded p-3 flex items-start gap-2">
+                  <div key={e.id} style={{ background: BG, border: `1px solid ${LINE}` }} className="rounded p-3 flex items-start gap-3">
+                    {e.image && (
+                      <button onClick={() => setLightboxImage(e.image)} className="shrink-0">
+                        <img src={e.image} alt="" className="w-16 h-16 rounded object-cover" style={{ border: `1px solid ${LINE}` }} />
+                      </button>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div style={{ color: TEXT_DIM }} className="text-xs mb-1">{e.date}</div>
-                      <div style={{ color: GREEN }} className="text-xs truncate">{e.text}</div>
+                      <div style={{ color: GREEN }} className="text-xs whitespace-pre-wrap break-words">{e.text}</div>
                       <div className="flex gap-2 mt-1" style={{ color: TEXT_DIM }}>
-                        {e.image && <span className="flex items-center gap-1 text-xs"><ImageIcon size={10} /> photo</span>}
                         {e.location && <span className="flex items-center gap-1 text-xs"><MapPin size={10} /> {e.location}</span>}
                       </div>
                     </div>
@@ -374,6 +394,24 @@ export default function AdminPage() {
               <button onClick={() => deleteUser(pendingDeleteUser)} style={{ background: RED, color: BG }} className="flex-1 rounded py-2 text-xs font-medium">delete account</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{ background: "rgba(0,0,0,0.9)" }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-6 cursor-zoom-out"
+        >
+          <button onClick={() => setLightboxImage(null)} style={{ background: "rgba(255,255,255,0.1)" }} className="absolute top-5 right-5 p-2 rounded-full">
+            <X size={18} style={{ color: "#fff" }} />
+          </button>
+          <img
+            src={lightboxImage}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full rounded object-contain cursor-default"
+          />
         </div>
       )}
     </div>
