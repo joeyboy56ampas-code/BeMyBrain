@@ -68,6 +68,24 @@ as $$
     b.updated_at
   from brain_data b;
 $$;
+
+-- SQL function: รวมขนาดที่ใช้จริงทั้งระบบ (ฐานข้อมูล + Storage) สำหรับหน้า Admin
+create or replace function admin_capacity()
+returns table (
+  db_bytes bigint,
+  storage_bytes bigint,
+  storage_files bigint
+)
+language sql
+security definer
+as $$
+  select
+    (select coalesce(sum(length(payload::text)), 0)::bigint from brain_data) as db_bytes,
+    (select coalesce(sum((metadata->>'size')::bigint), 0)::bigint
+       from storage.objects where bucket_id = 'memory-photos') as storage_bytes,
+    (select count(*)::bigint
+       from storage.objects where bucket_id = 'memory-photos') as storage_files;
+$$;
 ```
 
 ### 1.1 สร้าง Storage bucket สำหรับเก็บรูป (สำคัญมาก)

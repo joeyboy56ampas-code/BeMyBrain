@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import ShatterTransition from "../../components/ShatterTransition";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, MapPin, Loader2, LogOut, Search, Brain,
+  ChevronRight, MapPin, Loader2, LogOut, Search, Brain, Image as ImageIcon, Database,
 } from "lucide-react";
 
 const BG = "#050805";
@@ -39,6 +40,43 @@ function timeAgo(iso) {
   return `${days}d ago`;
 }
 
+function CapacityBar({ icon: Icon, label, used, limit, sub }) {
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const danger = pct >= 80;
+  const warn = pct >= 60 && pct < 80;
+  const barColor = danger ? RED : warn ? "#E3A84E" : GREEN;
+  return (
+    <div style={{ background: PANEL, border: `1px solid ${danger ? RED : LINE}` }} className="rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2" style={{ color: TEXT_DIM }}>
+          <Icon size={13} /> <span className="text-xs">{label}</span>
+        </div>
+        <span style={{ color: barColor }} className="text-xs">{pct.toFixed(1)}%</span>
+      </div>
+      <div style={{ background: BG, height: 6, borderRadius: 999 }} className="overflow-hidden mb-2">
+        <div
+          style={{
+            width: `${pct}%`,
+            background: barColor,
+            height: "100%",
+            borderRadius: 999,
+            transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)",
+            boxShadow: `0 0 8px ${barColor}`,
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <span style={{ color: GREEN }} className="text-xs">{formatBytes(used)}</span>
+        <span style={{ color: TEXT_DIM }} className="text-xs">of {formatBytes(limit)}</span>
+      </div>
+      {sub && <div style={{ color: TEXT_DIM }} className="text-[10px] mt-1">{sub}</div>}
+      <div style={{ color: TEXT_DIM }} className="text-[10px] mt-1">
+        {formatBytes(Math.max(0, limit - used))} remaining
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { status } = useSession();
   const router = useRouter();
@@ -58,6 +96,8 @@ export default function AdminPage() {
   const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("lastSeen"); // lastSeen | size | memories | name
+  const [capacity, setCapacity] = useState(null);
+  const [leaving, setLeaving] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
@@ -126,6 +166,13 @@ export default function AdminPage() {
     } catch (e) {}
   };
 
+  const loadCapacity = async () => {
+    try {
+      const res = await fetch("/api/admin/capacity");
+      if (res.ok) setCapacity(await res.json());
+    } catch (e) {}
+  };
+
   const refreshDetailQuiet = async (email) => {
     try {
       const res = await fetch(`/api/admin/users/${encodeURIComponent(email)}`);
@@ -138,6 +185,14 @@ export default function AdminPage() {
     if (phase !== "ready") return;
     const interval = setInterval(refreshUsersQuiet, 5000);
     return () => clearInterval(interval);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "ready") return;
+    loadCapacity();
+    const interval = setInterval(loadCapacity, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // ถ้าเปิดดูรายละเอียดของ user คนใดคนหนึ่งอยู่ ก็ auto-refresh หน้านั้นด้วยเช่นกัน
@@ -214,6 +269,13 @@ export default function AdminPage() {
 
   return (
     <div style={{ background: BG, minHeight: "100vh", fontFamily: "monospace" }} className="w-full text-sm">
+      {leaving && (
+        <ShatterTransition
+          direction="toApp"
+          onDone={() => signOut({ callbackUrl: "/login" })}
+        />
+      )}
+
       <style>{`
         @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
         .admin-cursor { animation: blink 1s step-start infinite; }
@@ -267,7 +329,7 @@ export default function AdminPage() {
               <span className="text-lg">BEMYBRAIN // ADMIN</span>
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => setLeaving(true)}
               style={{ color: TEXT_DIM }}
               className="flex items-center gap-1.5 text-xs hover:text-white"
             >
@@ -348,6 +410,30 @@ export default function AdminPage() {
             </div>
           )}
 
+          {capacity && (
+            <div className="mb-6">
+              <div style={{ color: TEXT_DIM }} className="text-xs mb-2 flex items-center gap-1.5">
+                <Database size={12} /> system capacity
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <CapacityBar
+                  icon={Database}
+                  label="database (text data)"
+                  used={capacity.database.used}
+                  limit={capacity.database.limit}
+                  sub="Supabase free plan"
+                />
+                <CapacityBar
+                  icon={ImageIcon}
+                  label="photo storage"
+                  used={capacity.storage.used}
+                  limit={capacity.storage.limit}
+                  sub={`${capacity.storage.files} files · Supabase free plan`}
+                />
+              </div>
+            </div>
+          )}
+
           <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg overflow-hidden mb-8">
             <div style={{ borderBottom: `1px solid ${LINE}`, color: TEXT_DIM }} className="grid grid-cols-12 gap-2 px-4 py-2 text-xs">
               <div className="col-span-4">user</div>
@@ -377,8 +463,12 @@ export default function AdminPage() {
                 </div>
                 <div className="col-span-2 text-xs">{formatBytes(u.sizeBytes)}</div>
                 <div className="col-span-2 text-xs">
-                  {u.entryCount}
-                  {u.photoCount > 0 && <span style={{ color: TEXT_DIM }}> · {u.photoCount}📷</span>}
+                  <span>{u.entryCount}</span>
+                  {u.photoCount > 0 && (
+                    <span style={{ color: TEXT_DIM }} className="ml-2 inline-flex items-center gap-0.5">
+                      <ImageIcon size={10} />{u.photoCount}
+                    </span>
+                  )}
                 </div>
                 <div className="col-span-3 text-xs" style={{ color: TEXT_DIM }}>{timeAgo(u.lastSeen)}</div>
                 <div className="col-span-1 flex justify-end">

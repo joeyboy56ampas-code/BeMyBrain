@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { Brain, Eye, EyeOff } from "lucide-react";
 import { t } from "../../lib/i18n";
+import ShatterTransition from "../../components/ShatterTransition";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -32,10 +33,16 @@ function LoginForm() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [shattering, setShattering] = useState(false);
 
   useEffect(() => {
     if (status !== "authenticated") return;
-    router.replace(session?.user?.email === "__admin__" ? "/admin" : "/dashboard");
+    // ล็อกอินเป็น admin -> เล่นแอนิเมชันกระจกแตกก่อน แล้วค่อยเข้าหน้า /admin
+    if (session?.user?.email === "__admin__") {
+      setShattering(true);
+      return;
+    }
+    router.replace("/dashboard");
   }, [status, session, router]);
 
   useEffect(() => {
@@ -79,6 +86,10 @@ function LoginForm() {
       }}
       className="w-full flex items-center justify-center px-6 py-12 relative"
     >
+      {shattering && (
+        <ShatterTransition direction="toAdmin" onDone={() => router.replace("/admin")} />
+      )}
+
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Brain size={22} style={{ color: GOLD }} />
