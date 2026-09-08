@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, MapPin, Users, Loader2, LogOut,
+  ChevronRight, MapPin, Loader2, LogOut,
 } from "lucide-react";
 
 const BG = "#050805";
