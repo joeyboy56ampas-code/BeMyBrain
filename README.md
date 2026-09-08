@@ -49,7 +49,16 @@ NEXT_PUBLIC_SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 NEXTAUTH_SECRET=...
 NEXTAUTH_URL=https://<ลิงก์เว็บของคุณ>
+ADMIN_EMAILS=<อีเมล Gmail จริงของคุณ ที่จะให้มีสิทธิ์เข้าหน้า /admin (ไม่บังคับถ้าใช้ ADMIN_PASSWORD แทน)>
+ADMIN_PASSWORD=<รหัสผ่านที่คุณตั้งเอง สำหรับเข้าหน้า /admin แบบเร็ว ไม่ต้องผ่านบัญชี Google>
 ```
+
+ใช้ได้ทั้ง 2 แบบพร้อมกัน หรือแบบใดแบบหนึ่งก็ได้:
+- `ADMIN_EMAILS` — ล็อกอินด้วยบัญชี Google/username ปกติที่อยู่ใน allowlist นี้ แล้วเข้า `/admin` ได้ทันที (ผูกกับตัวตนจริง)
+- `ADMIN_PASSWORD` — ตั้งรหัสผ่านแยกเฉพาะหน้า `/admin` เท่านั้น ไม่ต้องพ่วงกับบัญชี Google เลย เข้าเร็วกว่า **รหัสนี้ตั้งไว้ใน Environment Variables ของ Vercel เท่านั้น ไม่เคยอยู่ในโค้ดหรือ GitHub repo เลย**
+
+ถ้ามีมากกว่า 1 คนใน ADMIN_EMAILS คั่นด้วย comma เช่น `ADMIN_EMAILS=you@gmail.com,partner@gmail.com`
+สิทธิ์ Admin ผูกกับอีเมลที่ล็อกอินจริง (ผ่านการยืนยันตัวตนปกติ) ไม่ใช่รหัสผ่านแยกต่างหาก — เข้าหน้า Admin ได้ที่ `/admin` หลังล็อกอินด้วยบัญชีที่อยู่ใน allowlist นี้แล้ว
 
 ลบตัวแปร `NEXT_PUBLIC_SUPABASE_ANON_KEY` เก่าออกได้เลยถ้ามีอยู่ ไม่ใช้แล้ว
 
