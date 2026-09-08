@@ -211,6 +211,8 @@ export default function Dashboard() {
   const [saveTick, setSaveTick] = useState(false);
   const [saveError, setSaveError] = useState("");
   const saveQueue = useRef(null);
+  const userEmail = session?.user?.email || null;
+  const loadedForEmail = useRef(null);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
@@ -223,15 +225,25 @@ export default function Dashboard() {
     if (session?.user?.email === "__admin__") router.replace("/admin");
   }, [status, session, router]);
 
+  // *** สำคัญมาก ***
+  // ต้องผูก effect กับ "อีเมล" (ข้อความคงที่) ไม่ใช่กับอ็อบเจกต์ session
+  // เพราะ NextAuth สร้าง session เป็นอ็อบเจกต์ใหม่ทุกครั้งที่มันรีเฟรชเอง
+  // (เกิดเป็นระยะ + ทุกครั้งที่สลับกลับมาที่แท็บ)
+  // ถ้าผูกกับ session ตรง ๆ effect จะรันซ้ำ แล้วโหลดข้อมูลจากเซิร์ฟเวอร์มาทับ state ในเครื่อง
+  // ทำให้ความทรงจำที่ยังบันทึกไม่เสร็จหายทันที และคิวบันทึกถูกสร้างใหม่ทิ้งงานที่ค้างอยู่
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.email) return;
+    if (status !== "authenticated" || !userEmail) return;
+    // กันโหลดซ้ำ: โหลดข้อมูลครั้งเดียวต่อผู้ใช้หนึ่งคนเท่านั้น
+    if (loadedForEmail.current === userEmail) return;
+    loadedForEmail.current = userEmail;
+
     (async () => {
       const data = await loadBundle();
       setEntries(data.entries);
       setPeople(data.people);
       setCategories(data.categories);
 
-      // สร้างคิวบันทึกครั้งเดียวตอนโหลดเสร็จ แล้วใช้ตัวเดิมตลอดอายุหน้านี้
+      // สร้างคิวบันทึกครั้งเดียว แล้วใช้ตัวเดิมตลอดอายุหน้านี้ (ห้ามสร้างใหม่ระหว่างทาง)
       saveQueue.current = createSaveQueue({
         send: (payload) =>
           saveBundle(payload.entries, payload.people, payload.categories, payload.baseUpdatedAt),
@@ -244,17 +256,17 @@ export default function Dashboard() {
 
       setBooting(false);
     })();
-  }, [status, session]);
+  }, [status, userEmail]);
 
   // ส่งสัญญาณ "ยังเปิดเว็บอยู่" ทุก 20 วินาที เพื่อให้หน้า Admin รู้ว่าใครกำลังใช้งานจริง ๆ ตอนนี้
   // (แทนการเดาจากเวลา login ล่าสุด ซึ่งไม่แม่นเท่า)
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.email) return;
+    if (status !== "authenticated" || !userEmail) return;
     const ping = () => fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
     ping();
     const interval = setInterval(ping, 20000);
     return () => clearInterval(interval);
-  }, [status, session]);
+  }, [status, userEmail]);
 
   // ส่งเข้าคิวบันทึก — เรียกถี่แค่ไหนก็ได้ คิวจะรวบและทยอยส่งให้เองทีละตัว
   const persist = (nextEntries, nextPeople, nextCategories) => {
