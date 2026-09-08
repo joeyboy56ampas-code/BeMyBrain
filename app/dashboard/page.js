@@ -110,9 +110,14 @@ async function saveBundle(entries, people, categories) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entries, people, categories }),
     });
-    if (!res.ok) console.error("save failed", await res.text());
+    if (!res.ok) {
+      // 413 = payload ใหญ่เกินลิมิต 4.5MB ของ Vercel (สาเหตุที่พบบ่อยที่สุดคือรูปเยอะเกินไป)
+      if (res.status === 413) return { ok: false, reason: "too_large" };
+      return { ok: false, reason: "failed" };
+    }
+    return { ok: true };
   } catch (e) {
-    console.error("save failed", e);
+    return { ok: false, reason: "offline" };
   }
 }
 
@@ -154,6 +159,7 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
@@ -190,9 +196,13 @@ export default function Dashboard() {
   const persist = (nextEntries, nextPeople, nextCategories) => {
     if (!session?.user?.email) return;
     setSaveTick(true);
-    saveBundle(nextEntries, nextPeople, nextCategories).finally(() =>
-      setTimeout(() => setSaveTick(false), 700)
-    );
+    setSaveError("");
+    saveBundle(nextEntries, nextPeople, nextCategories).then((result) => {
+      setTimeout(() => setSaveTick(false), 700);
+      // สำคัญ: ต้องบอก user เสมอถ้าเซฟไม่สำเร็จ ห้ามเงียบเด็ดขาด
+      // (ของเดิมกลืน error ทิ้งแล้วยังโชว์ว่า "บันทึกแล้ว" ทำให้ข้อมูลหายโดยไม่รู้ตัว)
+      if (!result.ok) setSaveError(result.reason);
+    });
   };
 
   // รวมการเพิ่มบันทึกใหม่และเพิ่มรายชื่อคนไว้ในการอัปเดตเดียว แล้วเซฟครั้งเดียว
@@ -328,7 +338,7 @@ export default function Dashboard() {
         user={user} view={view}
         setView={(v) => { setView(v); setActiveFilter(null); }}
         onOpenCategory={(id) => { setView("category"); setActiveFilter(id); }}
-        categories={categories} saving={saveTick} t={t}
+        categories={categories} saving={saveTick} saveError={saveError} t={t}
         onManageCategories={() => setShowManageCategories(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -339,6 +349,13 @@ export default function Dashboard() {
           onManageCategories={() => setShowManageCategories(true)}
           onOpenSettings={() => setShowSettings(true)}
         />
+        {saveError && (
+          <div style={{ background: "#3A1F1F", borderBottom: "1px solid #E38E8E" }} className="px-4 sm:px-8 py-3">
+            <p style={{ color: "#E38E8E" }} className="text-xs leading-relaxed">
+              {saveError === "too_large" ? t("save_failed_too_large") : saveError === "offline" ? t("save_failed_offline") : t("save_failed_generic")}
+            </p>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-24 md:pb-10">
           {view === "category" && !activeFilter && (
             <CategoryGrid categories={categories} entries={entries} onOpen={(id) => setActiveFilter(id)} t={t} />
@@ -494,7 +511,7 @@ function DashboardSkeleton() {
 }
 
 /* ---------------- sidebar / top bar ---------------- */
-function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, onManageCategories, onOpenSettings }) {
+function Sidebar({ user, view, setView, onOpenCategory, categories, saving, saveError, t, onManageCategories, onOpenSettings }) {
   const items = [
     { id: "category", label: t("nav_categories"), icon: LayoutGrid },
     { id: "timeline", label: t("nav_timeline"), icon: Rows },
@@ -538,8 +555,8 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, o
       </button>
       <div className="flex-1" />
       <div className="px-3 flex items-center gap-2 mb-2">
-        <span style={{ width: 6, height: 6, borderRadius: 999, background: saving ? GOLD : SAGE, opacity: saving ? 1 : 0.6 }} />
-        <span style={{ color: TEXT_FAINT }} className="text-xs">{saving ? t("saving") : t("saved")}</span>
+        <span style={{ width: 6, height: 6, borderRadius: 999, background: saveError ? "#E38E8E" : saving ? GOLD : SAGE, opacity: saving ? 1 : 0.6 }} />
+        <span style={{ color: saveError ? "#E38E8E" : TEXT_FAINT }} className="text-xs">{saveError ? t("save_failed_short") : saving ? t("saving") : t("saved")}</span>
       </div>
       <button onClick={onOpenSettings} style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3 px-2 flex items-center gap-2 hover:bg-white/5 rounded-lg -mx-2 pb-1">
         {user.image ? (
