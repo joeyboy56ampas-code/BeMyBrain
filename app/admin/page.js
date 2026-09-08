@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
-  ChevronRight, Image as ImageIcon, MapPin, Loader2, LogOut, Eye, EyeOff,
+  ChevronRight, Image as ImageIcon, MapPin, Loader2, LogOut,
 } from "lucide-react";
 
 const BG = "#050805";
@@ -15,7 +17,7 @@ const RED = "#FF4444";
 const TEXT_DIM = "#5F9B6F";
 
 const BOOT_LINES = [
-  "> verifying credentials...",
+  "> verifying admin session...",
   "> access granted.",
 ];
 
@@ -38,11 +40,10 @@ function timeAgo(iso) {
 }
 
 export default function AdminPage() {
-  const [phase, setPhase] = useState("checking"); // checking | login | booting | ready
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loginError, setLoginError] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
+  const { status } = useSession();
+  const router = useRouter();
+
+  const [phase, setPhase] = useState("checking"); // checking | denied | booting | ready
   const [bootLineIdx, setBootLineIdx] = useState(0);
 
   const [users, setUsers] = useState([]);
@@ -55,10 +56,14 @@ export default function AdminPage() {
   const [wiping, setWiping] = useState(false);
   const [actionError, setActionError] = useState("");
 
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace("/login");
+  }, [status, router]);
+
   const loadUsers = async () => {
     const res = await fetch("/api/admin/users");
     if (!res.ok) {
-      setPhase("login");
+      setPhase("denied");
       return false;
     }
     const data = await res.json();
@@ -66,22 +71,19 @@ export default function AdminPage() {
     return true;
   };
 
-  // เช็คว่ามีเซสชัน admin ที่ยัง valid อยู่แล้วหรือไม่ (เช่นเคย login ไว้ในเบราว์เซอร์นี้)
   useEffect(() => {
-    (async () => {
-      const ok = await loadUsers();
-      if (ok) setPhase("ready");
-    })();
+    if (status !== "authenticated") return;
+    setBootLineIdx(0);
+    setPhase("booting");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [status]);
 
-  // boot sequence หลัง login สำเร็จ
   useEffect(() => {
     if (phase !== "booting") return;
     if (bootLineIdx >= BOOT_LINES.length) {
       (async () => {
-        await loadUsers();
-        setPhase("ready");
+        const ok = await loadUsers();
+        if (ok) setPhase("ready");
       })();
       return;
     }
@@ -89,33 +91,6 @@ export default function AdminPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootLineIdx, phase]);
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoginError("");
-    setLoginLoading(true);
-    const res = await fetch("/api/admin/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    setLoginLoading(false);
-    if (!res.ok) {
-      setLoginError(res.status === 500 ? "Admin password isn't configured yet." : "Incorrect password.");
-      return;
-    }
-    setPassword("");
-    setBootLineIdx(0);
-    setPhase("booting");
-  };
-
-  const handleLogout = async () => {
-    await fetch("/api/admin/auth", { method: "DELETE" });
-    setUsers([]);
-    setSelectedEmail(null);
-    setDetail(null);
-    setPhase("login");
-  };
 
   const openUser = async (email) => {
     setSelectedEmail(email);
@@ -169,6 +144,10 @@ export default function AdminPage() {
   const totalSize = users.reduce((sum, u) => sum + u.sizeBytes, 0);
   const activeNow = users.filter((u) => u.recentlyActive).length;
 
+  if (status === "loading" || status === "unauthenticated") {
+    return <div style={{ background: BG, minHeight: "100vh" }} />;
+  }
+
   return (
     <div style={{ background: BG, minHeight: "100vh", fontFamily: "monospace" }} className="w-full text-sm">
       <style>{`
@@ -179,44 +158,6 @@ export default function AdminPage() {
       {phase === "checking" && (
         <div className="min-h-screen flex items-center justify-center" style={{ color: GREEN }}>
           <Loader2 className="animate-spin" size={20} />
-        </div>
-      )}
-
-      {phase === "login" && (
-        <div className="min-h-screen flex items-center justify-center px-6">
-          <form onSubmit={handleLogin} className="w-full max-w-xs">
-            <div className="flex items-center gap-2 justify-center mb-6" style={{ color: GREEN, textShadow: `0 0 10px ${GREEN_DIM}` }}>
-              <Shield size={20} />
-              <span>BEMYBRAIN // ADMIN</span>
-            </div>
-            <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg p-5">
-              <label className="block mb-3">
-                <span style={{ color: TEXT_DIM }} className="text-xs">password</span>
-                <div className="relative mt-1">
-                  <input
-                    autoFocus
-                    type={showPw ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{ background: BG, border: `1px solid ${LINE}`, color: GREEN }}
-                    className="w-full rounded px-3 py-2 pr-9 outline-none text-sm"
-                  />
-                  <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                    {showPw ? <EyeOff size={14} style={{ color: TEXT_DIM }} /> : <Eye size={14} style={{ color: TEXT_DIM }} />}
-                  </button>
-                </div>
-              </label>
-              {loginError && <p style={{ color: RED }} className="text-xs mb-3">{loginError}</p>}
-              <button
-                type="submit"
-                disabled={loginLoading || !password}
-                style={{ background: GREEN, color: BG }}
-                className="w-full rounded py-2 text-xs font-medium disabled:opacity-40"
-              >
-                {loginLoading ? "checking…" : "enter"}
-              </button>
-            </div>
-          </form>
         </div>
       )}
 
@@ -233,6 +174,23 @@ export default function AdminPage() {
         </div>
       )}
 
+      {phase === "denied" && (
+        <div style={{ color: RED }} className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <Shield size={32} />
+          <div className="text-lg">ACCESS DENIED</div>
+          <p style={{ color: TEXT_DIM }} className="text-xs max-w-xs">
+            This account isn't authorized for admin access.
+          </p>
+          <button
+            onClick={() => router.replace("/dashboard")}
+            style={{ border: `1px solid ${LINE}`, color: GREEN }}
+            className="mt-2 px-4 py-2 rounded text-xs"
+          >
+            back to dashboard
+          </button>
+        </div>
+      )}
+
       {phase === "ready" && (
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8">
           <div className="flex items-center justify-between mb-8">
@@ -241,7 +199,7 @@ export default function AdminPage() {
               <span className="text-lg">BEMYBRAIN // ADMIN</span>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => signOut({ callbackUrl: "/login" })}
               style={{ color: TEXT_DIM }}
               className="flex items-center gap-1.5 text-xs hover:text-white"
             >

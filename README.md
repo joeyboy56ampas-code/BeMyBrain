@@ -55,10 +55,9 @@ ADMIN_PASSWORD=<รหัสผ่านที่คุณตั้งเอง 
 
 ใช้ได้ทั้ง 2 แบบพร้อมกัน หรือแบบใดแบบหนึ่งก็ได้:
 - `ADMIN_EMAILS` — ล็อกอินด้วยบัญชี Google/username ปกติที่อยู่ใน allowlist นี้ แล้วเข้า `/admin` ได้ทันที (ผูกกับตัวตนจริง)
-- `ADMIN_PASSWORD` — ตั้งรหัสผ่านแยกเฉพาะหน้า `/admin` เท่านั้น ไม่ต้องพ่วงกับบัญชี Google เลย เข้าเร็วกว่า **รหัสนี้ตั้งไว้ใน Environment Variables ของ Vercel เท่านั้น ไม่เคยอยู่ในโค้ดหรือ GitHub repo เลย**
+- `ADMIN_PASSWORD` — เข้าที่**หน้า login ปกติ** (`/login`) ใส่ username เป็น `admin` และรหัสผ่านตามที่ตั้งไว้ในนี้ ระบบจะพาไปหน้า `/admin` ให้อัตโนมัติ **รหัสนี้ตั้งไว้ใน Environment Variables ของ Vercel เท่านั้น ไม่เคยอยู่ในโค้ดหรือ GitHub repo เลย** และ username "admin" ถูกกันไว้ ผู้ใช้ทั่วไปสมัครซ้ำด้วยชื่อนี้ไม่ได้
 
 ถ้ามีมากกว่า 1 คนใน ADMIN_EMAILS คั่นด้วย comma เช่น `ADMIN_EMAILS=you@gmail.com,partner@gmail.com`
-สิทธิ์ Admin ผูกกับอีเมลที่ล็อกอินจริง (ผ่านการยืนยันตัวตนปกติ) ไม่ใช่รหัสผ่านแยกต่างหาก — เข้าหน้า Admin ได้ที่ `/admin` หลังล็อกอินด้วยบัญชีที่อยู่ใน allowlist นี้แล้ว
 
 ลบตัวแปร `NEXT_PUBLIC_SUPABASE_ANON_KEY` เก่าออกได้เลยถ้ามีอยู่ ไม่ใช้แล้ว
 

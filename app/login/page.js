@@ -24,7 +24,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -34,8 +34,9 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
-  }, [status, router]);
+    if (status !== "authenticated") return;
+    router.replace(session?.user?.email === "__admin__" ? "/admin" : "/dashboard");
+  }, [status, session, router]);
 
   useEffect(() => {
     const err = searchParams.get("error");
@@ -64,7 +65,7 @@ function LoginForm() {
       setError(t("login_error_credentials"));
       return;
     }
-    router.replace("/dashboard");
+    router.replace(username.trim().toLowerCase() === "admin" ? "/admin" : "/dashboard");
   };
 
   return (

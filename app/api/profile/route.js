@@ -49,6 +49,9 @@ export async function PATCH(request) {
 
   if (typeof username === "string" && username.trim()) {
     const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername === "admin") {
+      return NextResponse.json({ error: "username_taken" }, { status: 409 });
+    }
     if (cleanUsername !== user.username) {
       const { data: clash } = await supabaseAdmin
         .from("users")

@@ -28,6 +28,11 @@ export async function POST(request) {
   const cleanEmail = payload.email.trim().toLowerCase();
   const cleanUsername = username.trim().toLowerCase();
 
+  // "admin" สงวนไว้สำหรับผู้ดูแลระบบเท่านั้น กันไม่ให้ชนกับ path พิเศษใน authorize()
+  if (cleanUsername === "admin") {
+    return NextResponse.json({ error: "already_exists" }, { status: 409 });
+  }
+
   const { data: emailMatch } = await supabaseAdmin
     .from("users")
     .select("email, username, password_hash")
