@@ -25,8 +25,9 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   const [name, setName] = useState(user?.name || "");
   const [username, setUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [changingPassword, setChangingPassword] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -35,7 +36,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
     if (!open) return;
     setName(user?.name || "");
     setNewPassword("");
-    setChangingPassword(false);
+    setConfirmPassword("");
     setError("");
     setSaved(false);
     (async () => {
@@ -54,6 +55,18 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   const handleSave = async () => {
     setError("");
     setSaved(false);
+
+    if (newPassword || confirmPassword) {
+      if (newPassword.length < 8) {
+        setError("New password must be at least 8 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError("Passwords don't match.");
+        return;
+      }
+    }
+
     setLoading(true);
     const res = await fetch("/api/profile", {
       method: "PATCH",
@@ -77,7 +90,7 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
       await updateSession({ name: data.name });
     }
     setNewPassword("");
-    setChangingPassword(false);
+    setConfirmPassword("");
     setSaved(true);
   };
 
@@ -137,35 +150,15 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
             </label>
 
             <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3">
-              {!changingPassword ? (
-                <button
-                  type="button"
-                  onClick={() => setChangingPassword(true)}
-                  style={{ color: TEXT_MUTED }}
-                  className="text-xs hover:text-white"
-                >
-                  Change password
-                </button>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span style={{ color: TEXT_MUTED }} className="text-xs">Password</span>
-                    <button
-                      type="button"
-                      onClick={() => { setChangingPassword(false); setNewPassword(""); }}
-                      style={{ color: TEXT_FAINT }}
-                      className="text-xs hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <div className="relative">
+              <div className="flex flex-col gap-2">
+                <label className="block">
+                  <span style={{ color: TEXT_MUTED }} className="text-xs">New password</span>
+                  <div className="relative mt-1">
                     <input
-                      autoFocus
                       type={showPw ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="New password (min. 8 characters)"
+                      placeholder="At least 8 characters"
                       style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
                       className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
                     />
@@ -173,8 +166,27 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
                       {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
                     </button>
                   </div>
-                </>
-              )}
+                </label>
+                <label className="block">
+                  <span style={{ color: TEXT_MUTED }} className="text-xs">Confirm new password</span>
+                  <div className="relative mt-1">
+                    <input
+                      type={showConfirmPw ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+                      className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
+                    />
+                    <button type="button" onClick={() => setShowConfirmPw((v) => !v)} className="absolute right-2.5 top-2.5">
+                      {showConfirmPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+                    </button>
+                  </div>
+                </label>
+                <p style={{ color: TEXT_FAINT }} className="text-xs leading-relaxed">
+                  Leave both blank to keep your current password.
+                </p>
+              </div>
             </div>
 
             {error && <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>}
