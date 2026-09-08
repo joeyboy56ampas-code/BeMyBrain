@@ -24,14 +24,23 @@ export async function GET() {
     return NextResponse.json({ error: "load_failed" }, { status: 500 });
   }
 
+  const { data: presenceRows } = await supabaseAdmin
+    .from("presence")
+    .select("user_email, last_seen");
+
   const brainByEmail = {};
   brainRows.forEach((row) => {
     brainByEmail[row.user_email] = row;
   });
 
-  // "กำลังใช้งานอยู่" ประมาณจากการ login ล่าสุดภายใน 15 นาที (ไม่ใช่ real-time presence จริง
-  // เพราะต้องมี infrastructure เพิ่ม เช่น websocket — นี่คือค่าประมาณที่ตรงไปตรงมาที่สุดเท่าที่ทำได้ตอนนี้)
-  const RECENT_MS = 15 * 60 * 1000;
+  const presenceByEmail = {};
+  (presenceRows || []).forEach((row) => {
+    presenceByEmail[row.user_email] = row.last_seen;
+  });
+
+  // "กำลังใช้งานอยู่ตอนนี้จริง ๆ" — เว็บส่ง heartbeat มาทุก 20 วิ ขณะเปิดแดชบอร์ดค้างไว้
+  // ถือว่า active ถ้า heartbeat ล่าสุดมาไม่เกิน 40 วิ (เผื่อ buffer ให้ heartbeat รอบถัดไปมาไม่ทัน)
+  const ACTIVE_WINDOW_MS = 40 * 1000;
   const now = Date.now();
 
   const result = users.map((u) => {
@@ -41,14 +50,14 @@ export async function GET() {
     const entries = row?.payload?.entries || [];
     const people = row?.payload?.people || [];
     const categories = row?.payload?.categories || [];
-    const lastLoginMs = u.last_login ? new Date(u.last_login).getTime() : null;
+    const lastSeenMs = presenceByEmail[u.email] ? new Date(presenceByEmail[u.email]).getTime() : null;
     return {
       email: u.email,
       username: u.username,
       name: u.name,
       avatarUrl: u.avatar_url,
       lastLogin: u.last_login,
-      recentlyActive: lastLoginMs ? now - lastLoginMs < RECENT_MS : false,
+      recentlyActive: lastSeenMs ? now - lastSeenMs < ACTIVE_WINDOW_MS : false,
       sizeBytes,
       entryCount: entries.length,
       peopleCount: people.length,

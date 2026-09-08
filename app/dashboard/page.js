@@ -166,6 +166,16 @@ export default function Dashboard() {
     })();
   }, [status, session]);
 
+  // ส่งสัญญาณ "ยังเปิดเว็บอยู่" ทุก 20 วินาที เพื่อให้หน้า Admin รู้ว่าใครกำลังใช้งานจริง ๆ ตอนนี้
+  // (แทนการเดาจากเวลา login ล่าสุด ซึ่งไม่แม่นเท่า)
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.email) return;
+    const ping = () => fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
+    ping();
+    const interval = setInterval(ping, 20000);
+    return () => clearInterval(interval);
+  }, [status, session]);
+
   const persist = (nextEntries, nextPeople, nextCategories) => {
     if (!session?.user?.email) return;
     setSaveTick(true);

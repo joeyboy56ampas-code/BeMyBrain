@@ -32,6 +32,12 @@ create table if not exists brain_data (
   payload jsonb not null default '{}'::jsonb,
   updated_at timestamptz
 );
+
+-- ตารางใหม่: เก็บสัญญาณ "ยังเปิดเว็บอยู่" (heartbeat) เพื่อให้หน้า Admin รู้ว่าใคร active จริง ๆ ตอนนี้
+create table if not exists presence (
+  user_email text primary key references users(email),
+  last_seen timestamptz
+);
 ```
 
 ### 2. เตรียม Environment Variables

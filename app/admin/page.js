@@ -113,6 +113,38 @@ export default function AdminPage() {
     setDetailLoading(false);
   };
 
+  // เงียบ ๆ รีเฟรชโดยไม่โชว์ loading spinner ซ้ำ ใช้สำหรับ auto-refresh เป็นระยะ
+  const refreshUsersQuiet = async () => {
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users || []);
+      }
+    } catch (e) {}
+  };
+
+  const refreshDetailQuiet = async (email) => {
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(email)}`);
+      if (res.ok) setDetail(await res.json());
+    } catch (e) {}
+  };
+
+  // auto-refresh รายชื่อ user ทุก 5 วิ ขณะเปิดหน้า admin ค้างไว้ (ไม่ต้องกด refresh เว็บเอง)
+  useEffect(() => {
+    if (phase !== "ready") return;
+    const interval = setInterval(refreshUsersQuiet, 5000);
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  // ถ้าเปิดดูรายละเอียดของ user คนใดคนหนึ่งอยู่ ก็ auto-refresh หน้านั้นด้วยเช่นกัน
+  useEffect(() => {
+    if (!selectedEmail) return;
+    const interval = setInterval(() => refreshDetailQuiet(selectedEmail), 5000);
+    return () => clearInterval(interval);
+  }, [selectedEmail]);
+
   const deleteEntry = async (entryId) => {
     await fetch(`/api/admin/users/${encodeURIComponent(selectedEmail)}/entry/${entryId}`, { method: "DELETE" });
     setPendingDeleteEntry(null);
@@ -234,7 +266,7 @@ export default function AdminPage() {
             </div>
             <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1" style={{ color: TEXT_DIM }}>
-                <Activity size={13} /> <span className="text-xs">active in last 15 min</span>
+                <Activity size={13} /> <span className="text-xs">active now</span>
               </div>
               <div style={{ color: GREEN }} className="text-2xl">{activeNow}</div>
             </div>
