@@ -14,6 +14,7 @@ export async function POST(request) {
   }
 
   await supabaseAdmin.from("brain_data").delete().neq("user_email", "");
+  await supabaseAdmin.from("presence").delete().neq("user_email", "");
   const { error } = await supabaseAdmin.from("users").delete().neq("email", "");
 
   if (error) {

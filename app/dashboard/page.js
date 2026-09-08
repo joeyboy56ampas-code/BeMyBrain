@@ -160,7 +160,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
-  }, [status, router]);
+    // บัญชี admin (username "admin") ไม่ใช่ user จริงในตาราง users — ถ้าเผลอมาหน้านี้
+    // (พิมพ์ URL เอง) ต้องเด้งกลับไป /admin เพราะ /api/data และ /api/heartbeat จะเซฟไม่ได้
+    // (ติด foreign key เพราะไม่มีแถวอีเมลนี้ในตาราง users จริง ๆ)
+    if (session?.user?.email === "__admin__") router.replace("/admin");
+  }, [status, session, router]);
 
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;

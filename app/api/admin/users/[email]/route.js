@@ -50,6 +50,7 @@ export async function DELETE(request, { params }) {
   }
 
   await supabaseAdmin.from("brain_data").delete().eq("user_email", email);
+  await supabaseAdmin.from("presence").delete().eq("user_email", email);
   const { error } = await supabaseAdmin.from("users").delete().eq("email", email);
 
   if (error) {
