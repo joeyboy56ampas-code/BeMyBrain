@@ -4,8 +4,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff, Globe } from "lucide-react";
-import { useLang } from "../../lib/useLang";
+import { Brain, Eye, EyeOff } from "lucide-react";
+import { t } from "../../lib/i18n";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -27,7 +27,6 @@ function LoginForm() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { lang, toggleLang, t } = useLang();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -77,15 +76,6 @@ function LoginForm() {
       }}
       className="w-full flex items-center justify-center px-6 py-12 relative"
     >
-      <button
-        onClick={toggleLang}
-        style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
-        className="absolute top-5 right-5 flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium"
-        title="Switch language / เปลี่ยนภาษา"
-      >
-        <Globe size={13} /> {lang === "th" ? "TH" : "EN"}
-      </button>
-
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Brain size={22} style={{ color: GOLD }} />

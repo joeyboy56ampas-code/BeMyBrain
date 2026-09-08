@@ -1,16 +1,15 @@
 "use client";
 
-import { X, Globe, LogOut } from "lucide-react";
+import { X, LogOut } from "lucide-react";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
 const INK_LINE = "#2C2A3C";
 const PAPER = "#F6EFE2";
 const GOLD = "#E3A84E";
-const TEXT_MUTED = "#A9A5BE";
 const TEXT_FAINT = "#726E88";
 
-export default function SettingsModal({ open, onClose, user, lang, onToggleLang, onLogout, t }) {
+export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   if (!open) return null;
 
   return (
@@ -45,22 +44,6 @@ export default function SettingsModal({ open, onClose, user, lang, onToggleLang,
               <div style={{ color: PAPER }} className="truncate">{user?.name}</div>
               <div style={{ color: TEXT_FAINT }} className="text-xs truncate">{user?.email}</div>
             </div>
-          </div>
-
-          {/* language */}
-          <div>
-            <div style={{ color: TEXT_MUTED }} className="text-xs mb-2">{t("settings_language")}</div>
-            <button
-              onClick={onToggleLang}
-              style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-              className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-sm"
-            >
-              <span className="flex items-center gap-2">
-                <Globe size={15} style={{ color: TEXT_FAINT }} />
-                {lang === "th" ? "ภาษาไทย" : "English"}
-              </span>
-              <span style={{ color: GOLD }} className="text-xs font-medium">{t("settings_switch_to")}</span>
-            </button>
           </div>
 
           {/* logout */}

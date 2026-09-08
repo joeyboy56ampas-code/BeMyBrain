@@ -9,7 +9,7 @@ import {
   ChevronRight, Check, Brain, Trash2, Settings2, Pencil
 } from "lucide-react";
 import { CATEGORY_ICONS } from "../../lib/categoryIcons";
-import { makeT } from "../../lib/i18n";
+import { t } from "../../lib/i18n";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
@@ -150,26 +150,10 @@ export default function Dashboard() {
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
-  const [lang, setLang] = useState("th");
-
-  const t = makeT(lang);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("bemybrain_lang");
-      if (saved === "en" || saved === "th") setLang(saved);
-    } catch (e) {}
-  }, []);
-
-  const toggleLang = () => {
-    const next = lang === "th" ? "en" : "th";
-    setLang(next);
-    try { window.localStorage.setItem("bemybrain_lang", next); } catch (e) {}
-  };
 
   useEffect(() => {
     if (status !== "authenticated" || !session?.user?.email) return;
@@ -423,8 +407,6 @@ export default function Dashboard() {
         open={showSettings}
         onClose={() => setShowSettings(false)}
         user={user}
-        lang={lang}
-        onToggleLang={toggleLang}
         onLogout={() => signOut({ callbackUrl: "/login" })}
         t={t}
       />
