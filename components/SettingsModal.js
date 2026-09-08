@@ -15,8 +15,6 @@ const TEXT_FAINT = "#726E88";
 
 const ERROR_MESSAGES = {
   username_taken: "That username is already taken.",
-  current_password_required: "Enter your current password to set a new one.",
-  current_password_incorrect: "Current password is incorrect.",
   password_too_short: "New password must be at least 8 characters.",
   update_failed: "Couldn't save changes. Please try again.",
 };
@@ -26,7 +24,6 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
 
   const [name, setName] = useState(user?.name || "");
   const [username, setUsername] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -36,7 +33,6 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   useEffect(() => {
     if (!open) return;
     setName(user?.name || "");
-    setCurrentPassword("");
     setNewPassword("");
     setError("");
     setSaved(false);
@@ -63,7 +59,6 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
       body: JSON.stringify({
         name,
         username,
-        currentPassword: currentPassword || undefined,
         newPassword: newPassword || undefined,
       }),
     });
@@ -79,7 +74,6 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
     if (data.name && data.name !== user?.name) {
       await updateSession({ name: data.name });
     }
-    setCurrentPassword("");
     setNewPassword("");
     setSaved(true);
   };
@@ -141,31 +135,21 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
 
             <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3">
               <span style={{ color: TEXT_MUTED }} className="text-xs">Change password</span>
-              <div className="flex flex-col gap-2 mt-1">
+              <div className="relative mt-1">
                 <input
                   type={showPw ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Current password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password (min. 8 characters)"
                   style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                  className="w-full rounded-lg px-3 py-2 outline-none text-sm"
+                  className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
                 />
-                <div className="relative">
-                  <input
-                    type={showPw ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New password (min. 8 characters)"
-                    style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                    className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                  />
-                  <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                    {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                  </button>
-                </div>
+                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
+                  {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
+                </button>
               </div>
               <p style={{ color: TEXT_FAINT }} className="text-xs mt-1.5 leading-relaxed">
-                Leave both blank to keep your current password.
+                Leave blank to keep your current password.
               </p>
             </div>
 

@@ -29,7 +29,7 @@ export async function PATCH(request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { name, username, currentPassword, newPassword } = await request.json();
+  const { name, username, newPassword } = await request.json();
 
   const { data: user, error: fetchError } = await supabaseAdmin
     .from("users")
@@ -63,13 +63,6 @@ export async function PATCH(request) {
   }
 
   if (newPassword) {
-    if (!currentPassword) {
-      return NextResponse.json({ error: "current_password_required" }, { status: 400 });
-    }
-    const valid = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!valid) {
-      return NextResponse.json({ error: "current_password_incorrect" }, { status: 400 });
-    }
     if (newPassword.length < 8) {
       return NextResponse.json({ error: "password_too_short" }, { status: 400 });
     }
