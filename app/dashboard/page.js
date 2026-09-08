@@ -417,7 +417,10 @@ export default function Dashboard() {
         open={showSettings}
         onClose={() => setShowSettings(false)}
         user={user}
-        onLogout={() => signOut({ callbackUrl: "/login" })}
+        onLogout={async () => {
+          await fetch("/api/heartbeat", { method: "DELETE" }).catch(() => {});
+          signOut({ callbackUrl: "/login" });
+        }}
         t={t}
       />
 

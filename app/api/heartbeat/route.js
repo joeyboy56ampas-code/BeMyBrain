@@ -16,3 +16,15 @@ export async function POST() {
 
   return NextResponse.json({ ok: true });
 }
+
+// เรียกตอน logout เพื่อล้างสถานะ "active" ทันที แทนที่จะรอให้ heartbeat หมดอายุเอง (นานสุด ~40 วิ)
+export async function DELETE() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  await supabaseAdmin.from("presence").delete().eq("user_email", session.user.email);
+
+  return NextResponse.json({ ok: true });
+}
