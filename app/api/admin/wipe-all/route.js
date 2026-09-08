@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 import { checkAdminAccess } from "../../../../lib/checkAdminAccess";
+import { deleteAllPhotos } from "../../../../lib/deleteStorageFiles";
 
 export async function POST(request) {
   if (!(await checkAdminAccess())) {
@@ -12,6 +13,9 @@ export async function POST(request) {
   if (confirm !== "WIPE ALL DATA") {
     return NextResponse.json({ error: "confirmation_mismatch" }, { status: 400 });
   }
+
+  // ต้องลบไฟล์รูปใน Storage ด้วย ไม่งั้นไฟล์จะค้างกินพื้นที่ตลอดไปแม้ลบบัญชีไปแล้ว
+  await deleteAllPhotos();
 
   await supabaseAdmin.from("brain_data").delete().neq("user_email", "");
   await supabaseAdmin.from("presence").delete().neq("user_email", "");

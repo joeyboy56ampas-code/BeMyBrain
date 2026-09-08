@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../../../lib/supabaseAdmin";
 import { checkAdminAccess } from "../../../../../../../lib/checkAdminAccess";
+import { deletePhotoByUrl } from "../../../../../../../lib/deleteStorageFiles";
 
 export async function DELETE(request, { params }) {
   if (!(await checkAdminAccess())) {
@@ -20,7 +21,12 @@ export async function DELETE(request, { params }) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const nextEntries = (row.payload?.entries || []).filter((e) => e.id !== entryId);
+  const allEntries = row.payload?.entries || [];
+  // ลบไฟล์รูปของความทรงจำนี้ใน Storage ด้วย (ถ้ามี) ก่อนเอาออกจาก payload
+  const target = allEntries.find((e) => e.id === entryId);
+  if (target?.image) await deletePhotoByUrl(target.image);
+
+  const nextEntries = allEntries.filter((e) => e.id !== entryId);
   const nextPayload = { ...row.payload, entries: nextEntries };
 
   const { error: updateError } = await supabaseAdmin

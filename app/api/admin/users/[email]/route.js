@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { authOptions } from "../../../../../lib/authOptions";
 import { supabaseAdmin } from "../../../../../lib/supabaseAdmin";
 import { checkAdminAccess } from "../../../../../lib/checkAdminAccess";
+import { deleteUserPhotos } from "../../../../../lib/deleteStorageFiles";
 
 export async function GET(request, { params }) {
   if (!(await checkAdminAccess())) {
@@ -48,6 +49,9 @@ export async function DELETE(request, { params }) {
   if (session?.user?.email && email.toLowerCase() === session.user.email.toLowerCase()) {
     return NextResponse.json({ error: "cannot_delete_self" }, { status: 400 });
   }
+
+  // ลบไฟล์รูปของ user คนนี้ใน Storage ด้วย ไม่งั้นไฟล์ค้างกินพื้นที่
+  await deleteUserPhotos(email);
 
   await supabaseAdmin.from("brain_data").delete().eq("user_email", email);
   await supabaseAdmin.from("presence").delete().eq("user_email", email);

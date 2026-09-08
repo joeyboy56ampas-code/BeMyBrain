@@ -139,6 +139,16 @@ async function loadBundle() {
   }
 }
 
+// ลบไฟล์รูปที่ไม่ได้ใช้แล้วออกจาก Storage (best-effort ไม่ต้องรอผล)
+function deleteOrphanPhoto(url) {
+  if (!url || !url.startsWith("http")) return; // base64 เก่าไม่มีไฟล์ให้ลบ
+  fetch("/api/photo", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  }).catch(() => {});
+}
+
 async function saveBundle(entries, people, categories, baseUpdatedAt) {
   try {
     const res = await fetch("/api/data", {
@@ -267,13 +277,20 @@ export default function Dashboard() {
   };
 
   const deleteEntry = (id) => {
+    const target = entries.find((e) => e.id === id);
     const nextEntries = entries.filter((e) => e.id !== id);
     setEntries(nextEntries);
     persist(nextEntries, people, categories);
+    // ลบไฟล์รูปที่ผูกกับความทรงจำนี้ออกจาก Storage ด้วย
+    if (target?.image) deleteOrphanPhoto(target.image);
   };
 
   // แก้ไขความทรงจำที่มีอยู่แล้ว — รวมการอัปเดต people roster ไว้ในการเซฟครั้งเดียวเหมือน addEntry
   const updateEntry = (id, patch) => {
+    // ถ้าเปลี่ยน/เอารูปเดิมออก ต้องลบไฟล์เก่าใน Storage ไม่ให้ค้าง
+    const prev = entries.find((e) => e.id === id);
+    if (prev?.image && prev.image !== patch.image) deleteOrphanPhoto(prev.image);
+
     const nextEntries = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
     let nextPeople = [...people];
     (patch.people || []).forEach((n) => {
@@ -362,6 +379,8 @@ export default function Dashboard() {
   const deleteCategory = (id) => {
     if (categories.length <= 1) return;
     const nextCategories = categories.filter((c) => c.id !== id);
+    // หมวดหมู่นี้ถูกลบพร้อมความทรงจำข้างใน -> ต้องลบไฟล์รูปของความทรงจำเหล่านั้นด้วย
+    entries.filter((e) => e.category === id && e.image).forEach((e) => deleteOrphanPhoto(e.image));
     const nextEntries = entries.filter((e) => e.category !== id);
     setCategories(nextCategories);
     setEntries(nextEntries);
@@ -1036,6 +1055,14 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
       setCompressing(false);
     }
   };
+  // เอารูปออก — ถ้าเป็นรูปที่เพิ่งอัปโหลดใหม่ในรอบนี้ (ยังไม่เคยเซฟ) ให้ลบไฟล์ทิ้งเลย
+  // แต่ถ้าเป็นรูปเดิมของความทรงจำที่กำลังแก้อยู่ อย่าเพิ่งลบ เผื่อ user กดยกเลิก
+  // (กรณีนั้น updateEntry จะเป็นคนลบให้ตอนกดบันทึกจริง)
+  const removeImage = () => {
+    if (image && image !== initialEntry?.image) deleteOrphanPhoto(image);
+    setImage(null);
+  };
+
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   const addTypedPerson = () => {
     if (newPerson.trim()) {
@@ -1105,7 +1132,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
             {image ? (
               <div className="relative">
                 <img src={image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg" />
-                <button onClick={() => setImage(null)} style={{ background: INK }} className="absolute top-2 right-2 p-1 rounded-full">
+                <button onClick={() => { removeImage(); }} style={{ background: INK }} className="absolute top-2 right-2 p-1 rounded-full">
                   <X size={13} style={{ color: PAPER }} />
                 </button>
               </div>
