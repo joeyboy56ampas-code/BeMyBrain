@@ -31,11 +31,11 @@ const FONT_DISPLAY = "var(--font-display), serif";
 const FONT_BODY = "var(--font-body), sans-serif";
 
 const DEFAULT_CATEGORIES = [
-  { id: "work", label: "งาน", icon: "Briefcase" },
-  { id: "love", label: "ความสัมพันธ์", icon: "Heart" },
-  { id: "health", label: "สุขภาพ", icon: "Activity" },
-  { id: "family", label: "ครอบครัว", icon: "Home" },
-  { id: "general", label: "ทั่วไป", icon: "Sparkles" },
+  { id: "work", label: "Work", icon: "Briefcase" },
+  { id: "love", label: "Relationships", icon: "Heart" },
+  { id: "health", label: "Health", icon: "Activity" },
+  { id: "family", label: "Family", icon: "Home" },
+  { id: "general", label: "General", icon: "Sparkles" },
 ];
 const ICONS = CATEGORY_ICONS;
 
