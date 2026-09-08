@@ -50,7 +50,14 @@ export async function POST(request) {
     .eq("user_email", session.user.email)
     .maybeSingle();
 
-  if (current?.updated_at && baseUpdatedAt && current.updated_at !== baseUpdatedAt) {
+  // *** ต้องเทียบเป็น "เวลา" ไม่ใช่ "ข้อความ" ***
+  // Postgres เก็บ timestamptz แล้วคืนค่ากลับมาเป็นรูปแบบ "...123+00:00"
+  // ส่วน JS toISOString() ให้ "...123Z" — เวลาเดียวกันเป๊ะ แต่คนละข้อความ
+  // ถ้าเทียบข้อความตรง ๆ จะเข้าใจผิดว่าชนกันทุกครั้ง แล้วเซฟไม่ได้เลยจนกว่าจะรีเฟรช
+  const serverMs = current?.updated_at ? new Date(current.updated_at).getTime() : null;
+  const clientMs = baseUpdatedAt ? new Date(baseUpdatedAt).getTime() : null;
+
+  if (serverMs !== null && clientMs !== null && serverMs !== clientMs) {
     return NextResponse.json(
       { error: "conflict", serverUpdatedAt: current.updated_at },
       { status: 409 }
