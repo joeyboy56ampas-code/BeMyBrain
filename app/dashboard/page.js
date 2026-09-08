@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
   Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
-  ChevronRight, Check, Brain, LogOut, Trash2, Settings2, Globe
+  ChevronRight, Check, Brain, LogOut, Trash2, Settings2, Globe, Pencil
 } from "lucide-react";
 import { makeT } from "../../lib/i18n";
 import ConfirmDialog from "../../components/ConfirmDialog";
@@ -23,8 +23,8 @@ const GOLD_SOFT = "#8B6F3C";
 const SAGE = "#8FA98C";
 const TEXT_MUTED = "#A9A5BE";
 const TEXT_FAINT = "#726E88";
-const FONT_DISPLAY = "'Noto Serif Thai', serif";
-const FONT_BODY = "'Noto Sans Thai', sans-serif";
+const FONT_DISPLAY = "var(--font-display), serif";
+const FONT_BODY = "var(--font-body), sans-serif";
 
 const DEFAULT_CATEGORIES = [
   { id: "work", label: "งาน", icon: "Briefcase" },
@@ -141,6 +141,9 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
+  const [pendingDeletePerson, setPendingDeletePerson] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [viewingImage, setViewingImage] = useState(null);
   const [lang, setLang] = useState("th");
 
   const t = makeT(lang);
@@ -203,6 +206,18 @@ export default function Dashboard() {
     persist(nextEntries, people, categories);
   };
 
+  // แก้ไขความทรงจำที่มีอยู่แล้ว — รวมการอัปเดต people roster ไว้ในการเซฟครั้งเดียวเหมือน addEntry
+  const updateEntry = (id, patch) => {
+    const nextEntries = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
+    let nextPeople = [...people];
+    (patch.people || []).forEach((n) => {
+      if (!nextPeople.find((p) => p.name === n)) nextPeople.push({ name: n, favorite: false });
+    });
+    setEntries(nextEntries);
+    setPeople(nextPeople);
+    persist(nextEntries, nextPeople, categories);
+  };
+
   const toggleFavorite = (name) => {
     const exists = people.find((p) => p.name === name);
     const next = exists
@@ -210,6 +225,35 @@ export default function Dashboard() {
       : [...people, { name, favorite: true }];
     setPeople(next);
     persist(entries, next, categories);
+  };
+
+  // เปลี่ยนชื่อบุคคล — อัปเดตทั้งใน people[] และในทุกความทรงจำที่เคยแท็กชื่อเดิมไว้
+  const renamePerson = (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    let nextPeople = people.map((p) => (p.name === oldName ? { ...p, name: trimmed } : p));
+    if (!people.find((p) => p.name === oldName)) nextPeople.push({ name: trimmed, favorite: false });
+    const nextEntries = entries.map((e) => ({
+      ...e,
+      people: (e.people || []).map((n) => (n === oldName ? trimmed : n)),
+    }));
+    setPeople(nextPeople);
+    setEntries(nextEntries);
+    persist(nextEntries, nextPeople, categories);
+    if (activeFilter === oldName) setActiveFilter(trimmed);
+  };
+
+  // ลบบุคคล — แค่เอาชื่อออกจากทุกความทรงจำที่แท็กไว้ (untag) ไม่ลบความทรงจำนั้นทิ้ง
+  const deletePerson = (name) => {
+    const nextPeople = people.filter((p) => p.name !== name);
+    const nextEntries = entries.map((e) => ({
+      ...e,
+      people: (e.people || []).filter((n) => n !== name),
+    }));
+    setPeople(nextPeople);
+    setEntries(nextEntries);
+    persist(nextEntries, nextPeople, categories);
+    if (activeFilter === name) setActiveFilter(null);
   };
 
   const addCategory = (label) => {
@@ -254,7 +298,7 @@ export default function Dashboard() {
       <main className="flex-1 min-w-0 flex flex-col" style={{ maxHeight: "100vh" }}>
         <TopBar
           query={query} setQuery={setQuery} onSearch={() => setView("search")} onCompose={() => setShowComposer(true)}
-          lang={lang} onToggleLang={toggleLang} t={t}
+          lang={lang} onToggleLang={toggleLang} t={t} user={user}
           onManageCategories={() => setShowManageCategories(true)}
           onLogout={() => signOut({ callbackUrl: "/login" })}
         />
@@ -265,22 +309,25 @@ export default function Dashboard() {
           {view === "category" && activeFilter && (
             <EntryList title={categories.find((c) => c.id === activeFilter)?.label}
               entries={entries.filter((e) => e.category === activeFilter)} onBack={() => setActiveFilter(null)}
-              onRequestDelete={setPendingDeleteEntry} t={t} />
+              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage} t={t} />
           )}
           {view === "timeline" && (
             <TimelineGallery entries={entries} mode={galleryMode} setMode={setGalleryMode}
-              onRequestDelete={setPendingDeleteEntry} t={t} />
+              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage} t={t} />
           )}
           {view === "location" && (
             <LocationView entries={entries} active={activeFilter} onOpen={setActiveFilter}
-              onRequestDelete={setPendingDeleteEntry} t={t} />
+              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage} t={t} />
           )}
           {view === "people" && (
             <PeopleView people={peopleRoster} entries={entries} active={activeFilter} onOpen={setActiveFilter}
-              onToggleFavorite={toggleFavorite} onRequestDelete={setPendingDeleteEntry} t={t} />
+              onToggleFavorite={toggleFavorite} onRequestDelete={setPendingDeleteEntry}
+              onRequestEdit={setEditingEntry} onImageClick={setViewingImage}
+              onRenamePerson={renamePerson} onDeletePerson={setPendingDeletePerson} t={t} />
           )}
           {view === "search" && (
-            <SearchView query={query} setQuery={setQuery} entries={entries} onRequestDelete={setPendingDeleteEntry} t={t} />
+            <SearchView query={query} setQuery={setQuery} entries={entries}
+              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage} t={t} />
           )}
         </div>
       </main>
@@ -293,6 +340,19 @@ export default function Dashboard() {
           onClose={() => setShowComposer(false)}
           onSave={(entry) => { addEntry(entry); setShowComposer(false); }}
         />
+      )}
+
+      {editingEntry && (
+        <Composer
+          categories={categories} people={peopleRoster} t={t}
+          initialEntry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); }}
+        />
+      )}
+
+      {viewingImage && (
+        <ImageLightbox src={viewingImage} onClose={() => setViewingImage(null)} />
       )}
 
       <ManageCategoriesModal
@@ -316,6 +376,19 @@ export default function Dashboard() {
         onConfirm={() => {
           deleteEntry(pendingDeleteEntry.id);
           setPendingDeleteEntry(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDeletePerson}
+        title={t("delete_person_title")}
+        body={t("delete_person_body")}
+        confirmLabel={t("delete_memory_confirm")}
+        cancelLabel={t("cancel")}
+        onCancel={() => setPendingDeletePerson(null)}
+        onConfirm={() => {
+          deletePerson(pendingDeletePerson);
+          setPendingDeletePerson(null);
         }}
       />
     </div>
@@ -430,9 +503,20 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, o
   );
 }
 
-function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, onManageCategories, onLogout }) {
+function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, onManageCategories, onLogout, user }) {
   return (
-    <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-8 py-4">
+    <div>
+      <div className="md:hidden flex items-center gap-2 px-4 pt-4">
+        {user?.image ? (
+          <img src={user.image} alt="" className="w-6 h-6 rounded-full shrink-0" />
+        ) : (
+          <div style={{ background: GOLD, color: INK }} className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium shrink-0">
+            {(user?.name || "?").slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <span style={{ color: PAPER }} className="text-sm truncate">{user?.name}</span>
+      </div>
+      <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-8 py-4">
       <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="flex-1 flex items-center gap-2 rounded-full px-4 py-2 min-w-0">
         <Search size={15} style={{ color: TEXT_FAINT }} className="shrink-0" />
         <input
@@ -465,27 +549,42 @@ function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, o
       >
         <Plus size={15} /> {t("new_memory")}
       </button>
+      </div>
     </div>
   );
 }
 
 /* ---------------- entry card ---------------- */
 
-function EntryCard({ entry, onRequestDelete }) {
+function EntryCard({ entry, onRequestDelete, onRequestEdit, onImageClick }) {
   return (
     <div style={{ background: PAPER, color: INK }} className="group relative rounded-xl p-4 shadow-lg flex flex-col gap-2">
-      {onRequestDelete && (
-        <button
-          onClick={() => onRequestDelete(entry)}
-          style={{ background: "rgba(21,19,31,0.75)" }}
-          className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full z-10"
-          title="Delete"
-        >
-          <Trash2 size={13} style={{ color: PAPER }} />
-        </button>
-      )}
+      <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {onRequestEdit && (
+          <button
+            onClick={() => onRequestEdit(entry)}
+            style={{ background: "rgba(21,19,31,0.75)" }}
+            className="p-1.5 rounded-full"
+            title="Edit"
+          >
+            <Pencil size={13} style={{ color: PAPER }} />
+          </button>
+        )}
+        {onRequestDelete && (
+          <button
+            onClick={() => onRequestDelete(entry)}
+            style={{ background: "rgba(21,19,31,0.75)" }}
+            className="p-1.5 rounded-full"
+            title="Delete"
+          >
+            <Trash2 size={13} style={{ color: PAPER }} />
+          </button>
+        )}
+      </div>
       {entry.image && (
-        <img src={entry.image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg mb-1" />
+        <button onClick={() => onImageClick && onImageClick(entry.image)} className="block">
+          <img src={entry.image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg mb-1 cursor-zoom-in" />
+        </button>
       )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
       <p className="leading-relaxed">{entry.text}</p>
@@ -501,6 +600,31 @@ function EntryCard({ entry, onRequestDelete }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ---------------- image lightbox (click a photo to view full size) ---------------- */
+function ImageLightbox({ src, onClose }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ background: "rgba(0,0,0,0.85)" }}
+      className="fixed inset-0 z-[60] flex items-center justify-center p-6 cursor-zoom-out"
+    >
+      <button
+        onClick={onClose}
+        style={{ background: "rgba(255,255,255,0.1)" }}
+        className="absolute top-5 right-5 p-2 rounded-full"
+      >
+        <X size={18} style={{ color: "#fff" }} />
+      </button>
+      <img
+        src={src}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-full max-h-full rounded-lg object-contain cursor-default"
+      />
     </div>
   );
 }
@@ -538,7 +662,7 @@ function CategoryGrid({ categories, entries, onOpen, t }) {
   );
 }
 
-function EntryList({ title, entries, onBack, onRequestDelete, t }) {
+function EntryList({ title, entries, onBack, onRequestDelete, onRequestEdit, onImageClick, t }) {
   return (
     <div className="pt-8">
       <button onClick={onBack} style={{ color: TEXT_FAINT }} className="flex items-center gap-1 text-xs mb-4">
@@ -547,14 +671,14 @@ function EntryList({ title, entries, onBack, onRequestDelete, t }) {
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{title}</h1>
       {entries.length === 0 ? <EmptyState text={t("empty_category")} /> : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {entries.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+          {entries.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       )}
     </div>
   );
 }
 
-function TimelineGallery({ entries, mode, setMode, onRequestDelete, t }) {
+function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdit, onImageClick, t }) {
   const grouped = useMemo(() => {
     const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
     const map = {};
@@ -580,7 +704,7 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, t }) {
         <div key={month} className="mb-8">
           <div style={{ color: GOLD }} className="text-xs mb-3">{month}</div>
           <div className="flex flex-col gap-3 pl-4" style={{ borderLeft: `1px solid ${INK_LINE}` }}>
-            {list.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+            {list.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
           </div>
         </div>
       ))}
@@ -614,7 +738,7 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, t }) {
   );
 }
 
-function LocationView({ entries, active, onOpen, onRequestDelete, t }) {
+function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit, onImageClick, t }) {
   const locations = useMemo(() => {
     const map = {};
     entries.forEach((e) => { if (!e.location) return; if (!map[e.location]) map[e.location] = []; map[e.location].push(e); });
@@ -630,7 +754,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, t }) {
           <MapPin size={20} style={{ color: GOLD }} /> {active}
         </h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {locations[active].map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+          {locations[active].map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       </div>
     );
@@ -656,7 +780,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, t }) {
   );
 }
 
-function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onRequestDelete, t }) {
+function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onRequestDelete, onRequestEdit, onImageClick, onRenamePerson, onDeletePerson, t }) {
   const byPerson = (name) => entries.filter((e) => (e.people || []).includes(name));
   if (active) {
     return (
@@ -668,7 +792,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
           <Users size={20} style={{ color: GOLD }} /> {active}
         </h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {byPerson(active).map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+          {byPerson(active).map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       </div>
     );
@@ -680,18 +804,9 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
       {sorted.length === 0 ? <EmptyState text={t("empty_people")} /> : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {sorted.map((p) => (
-            <div key={p.name} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 flex flex-col gap-4">
-              <div className="flex items-start justify-between">
-                <div style={{ background: PAPER, color: INK }} className="w-9 h-9 rounded-full flex items-center justify-center text-sm">{p.name.slice(0, 1)}</div>
-                <button onClick={() => onToggleFavorite(p.name)}>
-                  <Star size={15} style={{ color: p.favorite ? GOLD : TEXT_FAINT }} fill={p.favorite ? GOLD : "none"} />
-                </button>
-              </div>
-              <button onClick={() => onOpen(p.name)} className="text-left">
-                <div style={{ color: PAPER }} className="mb-0.5">{p.name}</div>
-                <div style={{ color: TEXT_FAINT }} className="text-xs">{t("together_count", byPerson(p.name).length)}</div>
-              </button>
-            </div>
+            <PersonCard key={p.name} person={p} count={byPerson(p.name).length}
+              onOpen={onOpen} onToggleFavorite={onToggleFavorite}
+              onRename={onRenamePerson} onDelete={onDeletePerson} t={t} />
           ))}
         </div>
       )}
@@ -699,7 +814,52 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
   );
 }
 
-function SearchView({ query, setQuery, entries, onRequestDelete, t }) {
+function PersonCard({ person: p, count, onOpen, onToggleFavorite, onRename, onDelete, t }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(p.name);
+
+  const commitRename = () => {
+    const trimmed = draft.trim();
+    setEditing(false);
+    if (trimmed && trimmed !== p.name) onRename(p.name, trimmed);
+    else setDraft(p.name);
+  };
+
+  return (
+    <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="group relative rounded-2xl p-5 flex flex-col gap-4">
+      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={() => { setDraft(p.name); setEditing(true); }} className="p-1.5 rounded-full" style={{ background: INK }} title="Edit">
+          <Pencil size={12} style={{ color: TEXT_MUTED }} />
+        </button>
+        <button onClick={() => onDelete(p.name)} className="p-1.5 rounded-full" style={{ background: INK }} title="Delete">
+          <Trash2 size={12} style={{ color: TEXT_MUTED }} />
+        </button>
+      </div>
+      <div className="flex items-start justify-between">
+        <div style={{ background: PAPER, color: INK }} className="w-9 h-9 rounded-full flex items-center justify-center text-sm">{p.name.slice(0, 1)}</div>
+        <button onClick={() => onToggleFavorite(p.name)}>
+          <Star size={15} style={{ color: p.favorite ? GOLD : TEXT_FAINT }} fill={p.favorite ? GOLD : "none"} />
+        </button>
+      </div>
+      {editing ? (
+        <input
+          autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { setDraft(p.name); setEditing(false); } }}
+          onBlur={commitRename}
+          style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
+          className="rounded-lg px-2 py-1 text-sm outline-none"
+        />
+      ) : (
+        <button onClick={() => onOpen(p.name)} className="text-left">
+          <div style={{ color: PAPER }} className="mb-0.5">{p.name}</div>
+          <div style={{ color: TEXT_FAINT }} className="text-xs">{t("together_count", count)}</div>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SearchView({ query, setQuery, entries, onRequestDelete, onRequestEdit, onImageClick, t }) {
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
@@ -717,20 +877,21 @@ function SearchView({ query, setQuery, entries, onRequestDelete, t }) {
       {!query.trim() ? <EmptyState text={t("empty_search_prompt")} /> :
         results.length === 0 ? <EmptyState text={t("empty_search_results")} /> : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {results.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} />)}
+          {results.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       )}
     </div>
   );
 }
 
-function Composer({ categories, people, onClose, onSave, t }) {
-  const [text, setText] = useState("");
-  const [category, setCategory] = useState(categories[categories.length - 1]?.id || categories[0].id);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [location, setLocation] = useState("");
-  const [image, setImage] = useState(null);
-  const [selectedPeople, setSelectedPeople] = useState([]);
+function Composer({ categories, people, onClose, onSave, t, initialEntry }) {
+  const isEdit = !!initialEntry;
+  const [text, setText] = useState(initialEntry?.text || "");
+  const [category, setCategory] = useState(initialEntry?.category || categories[categories.length - 1]?.id || categories[0].id);
+  const [date, setDate] = useState(initialEntry?.date || new Date().toISOString().slice(0, 10));
+  const [location, setLocation] = useState(initialEntry?.location || "");
+  const [image, setImage] = useState(initialEntry?.image || null);
+  const [selectedPeople, setSelectedPeople] = useState(initialEntry?.people || []);
   const [newPerson, setNewPerson] = useState("");
   const [compressing, setCompressing] = useState(false);
   const fileRef = useRef(null);
@@ -768,7 +929,7 @@ function Composer({ categories, people, onClose, onSave, t }) {
     <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-end sm:items-center justify-center z-50 sm:p-6">
       <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "90vh" }} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
         <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">
-          <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">{t("composer_title")}</span>
+          <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">{isEdit ? t("composer_edit_title") : t("composer_title")}</span>
           <button onClick={onClose}><X size={18} style={{ color: TEXT_FAINT }} /></button>
         </div>
         <div className="overflow-y-auto px-5 py-4 flex flex-col gap-4">
@@ -841,7 +1002,7 @@ function Composer({ categories, people, onClose, onSave, t }) {
         <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="px-5 py-4 flex justify-end gap-2">
           <button onClick={onClose} style={{ color: TEXT_MUTED }} className="text-sm px-4 py-2">{t("composer_cancel")}</button>
           <button onClick={save} disabled={!text.trim()} style={{ background: text.trim() ? GOLD : INK_LINE, color: text.trim() ? INK : TEXT_FAINT }} className="text-sm px-4 py-2 rounded-lg font-medium flex items-center gap-1.5">
-            <Check size={14} /> {t("composer_save")}
+            <Check size={14} /> {isEdit ? t("composer_save_changes") : t("composer_save")}
           </button>
         </div>
       </div>

@@ -110,7 +110,7 @@ function SignupInner() {
       style={{
         background: `radial-gradient(circle at 20% 10%, #2A2640 0%, ${INK} 55%)`,
         minHeight: "100vh",
-        fontFamily: "'Noto Sans Thai', sans-serif",
+        fontFamily: "var(--font-body), sans-serif",
       }}
       className="w-full flex items-center justify-center px-6 py-12 relative"
     >
@@ -126,13 +126,13 @@ function SignupInner() {
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
           <Brain size={22} style={{ color: GOLD }} />
-          <span style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER, fontSize: "1.35rem" }}>
+          <span style={{ fontFamily: "var(--font-display), serif", color: PAPER, fontSize: "1.35rem" }}>
             BeMyBrain
           </span>
         </div>
 
         <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-7">
-          <h1 style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER, fontSize: "1.25rem" }} className="mb-1">
+          <h1 style={{ fontFamily: "var(--font-display), serif", color: PAPER, fontSize: "1.25rem" }} className="mb-1">
             {t("signup_title")}
           </h1>
           <p style={{ color: TEXT_FAINT }} className="mb-6 leading-relaxed text-sm">

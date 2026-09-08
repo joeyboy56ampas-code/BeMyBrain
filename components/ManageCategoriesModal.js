@@ -58,7 +58,7 @@ export default function ManageCategoriesModal({ open, onClose, categories, entri
         >
           <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">
             <div>
-              <div style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER }} className="text-lg">
+              <div style={{ fontFamily: "var(--font-display), serif", color: PAPER }} className="text-lg">
                 {t("manage_categories_title")}
               </div>
               <div style={{ color: TEXT_FAINT }} className="text-xs mt-0.5">{t("manage_categories_desc")}</div>

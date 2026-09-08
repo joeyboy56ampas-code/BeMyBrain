@@ -47,7 +47,7 @@ export default function ConfirmDialog({
           </button>
         </div>
 
-        <h2 style={{ fontFamily: "'Noto Serif Thai', serif", color: PAPER, fontSize: "1.05rem" }} className="mb-2">
+        <h2 style={{ fontFamily: "var(--font-display), serif", color: PAPER, fontSize: "1.05rem" }} className="mb-2">
           {title}
         </h2>
         <p style={{ color: TEXT_MUTED }} className="text-sm leading-relaxed mb-6">
