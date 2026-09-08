@@ -11,6 +11,7 @@ import {
 import { makeT } from "../../lib/i18n";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
+import ManagePeopleModal from "../../components/ManagePeopleModal";
 import MobileNav from "../../components/MobileNav";
 
 const INK = "#15131F";
@@ -138,10 +139,10 @@ export default function Dashboard() {
   const [galleryMode, setGalleryMode] = useState("timeline");
   const [showComposer, setShowComposer] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
+  const [showManagePeople, setShowManagePeople] = useState(false);
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
-  const [pendingDeletePerson, setPendingDeletePerson] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
   const [lang, setLang] = useState("th");
@@ -323,7 +324,7 @@ export default function Dashboard() {
             <PeopleView people={peopleRoster} entries={entries} active={activeFilter} onOpen={setActiveFilter}
               onToggleFavorite={toggleFavorite} onRequestDelete={setPendingDeleteEntry}
               onRequestEdit={setEditingEntry} onImageClick={setViewingImage}
-              onRenamePerson={renamePerson} onDeletePerson={setPendingDeletePerson} t={t} />
+              onManagePeople={() => setShowManagePeople(true)} t={t} />
           )}
           {view === "search" && (
             <SearchView query={query} setQuery={setQuery} entries={entries}
@@ -366,6 +367,17 @@ export default function Dashboard() {
         onDelete={deleteCategory}
       />
 
+      <ManagePeopleModal
+        open={showManagePeople}
+        onClose={() => setShowManagePeople(false)}
+        people={peopleRoster}
+        entries={entries}
+        t={t}
+        onRename={renamePerson}
+        onDelete={deletePerson}
+        onToggleFavorite={toggleFavorite}
+      />
+
       <ConfirmDialog
         open={!!pendingDeleteEntry}
         title={t("delete_memory_title")}
@@ -379,18 +391,6 @@ export default function Dashboard() {
         }}
       />
 
-      <ConfirmDialog
-        open={!!pendingDeletePerson}
-        title={t("delete_person_title")}
-        body={t("delete_person_body")}
-        confirmLabel={t("delete_memory_confirm")}
-        cancelLabel={t("cancel")}
-        onCancel={() => setPendingDeletePerson(null)}
-        onConfirm={() => {
-          deletePerson(pendingDeletePerson);
-          setPendingDeletePerson(null);
-        }}
-      />
     </div>
   );
 }
@@ -712,17 +712,33 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdi
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).map((e) => (
             <div key={e.id} style={{ background: PAPER }} className="group relative rounded-lg overflow-hidden aspect-square">
-              {onRequestDelete && (
-                <button
-                  onClick={() => onRequestDelete(e)}
-                  style={{ background: "rgba(21,19,31,0.75)" }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full z-10"
-                  title="Delete"
-                >
-                  <Trash2 size={12} style={{ color: PAPER }} />
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                {onRequestEdit && (
+                  <button
+                    onClick={() => onRequestEdit(e)}
+                    style={{ background: "rgba(21,19,31,0.75)" }}
+                    className="p-1.5 rounded-full"
+                    title="Edit"
+                  >
+                    <Pencil size={12} style={{ color: PAPER }} />
+                  </button>
+                )}
+                {onRequestDelete && (
+                  <button
+                    onClick={() => onRequestDelete(e)}
+                    style={{ background: "rgba(21,19,31,0.75)" }}
+                    className="p-1.5 rounded-full"
+                    title="Delete"
+                  >
+                    <Trash2 size={12} style={{ color: PAPER }} />
+                  </button>
+                )}
+              </div>
+              {e.image ? (
+                <button onClick={() => onImageClick && onImageClick(e.image)} className="block w-full h-full cursor-zoom-in">
+                  <img src={e.image} alt="" className="w-full h-full object-cover" />
                 </button>
-              )}
-              {e.image ? <img src={e.image} alt="" className="w-full h-full object-cover" /> : (
+              ) : (
                 <div className="w-full h-full flex items-center justify-center p-3">
                   <span style={{ color: INK }} className="text-xs line-clamp-4">{e.text}</span>
                 </div>
@@ -780,7 +796,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit,
   );
 }
 
-function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onRequestDelete, onRequestEdit, onImageClick, onRenamePerson, onDeletePerson, t }) {
+function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onRequestDelete, onRequestEdit, onImageClick, onManagePeople, t }) {
   const byPerson = (name) => entries.filter((e) => (e.people || []).includes(name));
   if (active) {
     return (
@@ -800,13 +816,23 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
   const sorted = [...people].sort((a, b) => (b.favorite - a.favorite));
   return (
     <div className="pt-8">
-      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("people_title")}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }}>{t("people_title")}</h1>
+        {sorted.length > 0 && (
+          <button
+            onClick={onManagePeople}
+            style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
+            className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium shrink-0"
+          >
+            <Settings2 size={13} /> {t("manage_people")}
+          </button>
+        )}
+      </div>
       {sorted.length === 0 ? <EmptyState text={t("empty_people")} /> : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {sorted.map((p) => (
             <PersonCard key={p.name} person={p} count={byPerson(p.name).length}
-              onOpen={onOpen} onToggleFavorite={onToggleFavorite}
-              onRename={onRenamePerson} onDelete={onDeletePerson} t={t} />
+              onOpen={onOpen} onToggleFavorite={onToggleFavorite} t={t} />
           ))}
         </div>
       )}
@@ -814,47 +840,19 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
   );
 }
 
-function PersonCard({ person: p, count, onOpen, onToggleFavorite, onRename, onDelete, t }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(p.name);
-
-  const commitRename = () => {
-    const trimmed = draft.trim();
-    setEditing(false);
-    if (trimmed && trimmed !== p.name) onRename(p.name, trimmed);
-    else setDraft(p.name);
-  };
-
+function PersonCard({ person: p, count, onOpen, onToggleFavorite, t }) {
   return (
-    <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="group relative rounded-2xl p-5 flex flex-col gap-4">
-      <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => { setDraft(p.name); setEditing(true); }} className="p-1.5 rounded-full" style={{ background: INK }} title="Edit">
-          <Pencil size={12} style={{ color: TEXT_MUTED }} />
-        </button>
-        <button onClick={() => onDelete(p.name)} className="p-1.5 rounded-full" style={{ background: INK }} title="Delete">
-          <Trash2 size={12} style={{ color: TEXT_MUTED }} />
-        </button>
-      </div>
+    <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 flex flex-col gap-4">
       <div className="flex items-start justify-between">
         <div style={{ background: PAPER, color: INK }} className="w-9 h-9 rounded-full flex items-center justify-center text-sm">{p.name.slice(0, 1)}</div>
         <button onClick={() => onToggleFavorite(p.name)}>
           <Star size={15} style={{ color: p.favorite ? GOLD : TEXT_FAINT }} fill={p.favorite ? GOLD : "none"} />
         </button>
       </div>
-      {editing ? (
-        <input
-          autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") { setDraft(p.name); setEditing(false); } }}
-          onBlur={commitRename}
-          style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-          className="rounded-lg px-2 py-1 text-sm outline-none"
-        />
-      ) : (
-        <button onClick={() => onOpen(p.name)} className="text-left">
-          <div style={{ color: PAPER }} className="mb-0.5">{p.name}</div>
-          <div style={{ color: TEXT_FAINT }} className="text-xs">{t("together_count", count)}</div>
-        </button>
-      )}
+      <button onClick={() => onOpen(p.name)} className="text-left">
+        <div style={{ color: PAPER }} className="mb-0.5">{p.name}</div>
+        <div style={{ color: TEXT_FAINT }} className="text-xs">{t("together_count", count)}</div>
+      </button>
     </div>
   );
 }
