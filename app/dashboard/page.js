@@ -129,6 +129,13 @@ function mergedPeopleRoster(entries, people) {
   return Array.from(map.values());
 }
 
+// รายชื่อสถานที่ที่เคยใช้มาแล้ว ดึงจาก entries ตรง ๆ เหมือนกัน สำหรับให้เลือกซ้ำได้ทันทีตอนเพิ่มความทรงจำใหม่
+function uniqueLocations(entries) {
+  const set = new Set();
+  entries.forEach((e) => { if (e.location) set.add(e.location); });
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -309,6 +316,7 @@ export default function Dashboard() {
   if (!session) return null;
   const user = { name: session.user.name, email: session.user.email, image: session.user.image };
   const peopleRoster = mergedPeopleRoster(entries, people);
+  const locationRoster = uniqueLocations(entries);
 
   return (
     <div style={{ background: INK, fontFamily: FONT_BODY, minHeight: "100vh" }} className="w-full flex text-sm">
@@ -362,7 +370,7 @@ export default function Dashboard() {
 
       {showComposer && (
         <Composer
-          categories={categories} people={peopleRoster} t={t}
+          categories={categories} people={peopleRoster} locations={locationRoster} t={t}
           onClose={() => setShowComposer(false)}
           onSave={(entry) => { addEntry(entry); setShowComposer(false); }}
         />
@@ -370,7 +378,7 @@ export default function Dashboard() {
 
       {editingEntry && (
         <Composer
-          categories={categories} people={peopleRoster} t={t}
+          categories={categories} people={peopleRoster} locations={locationRoster} t={t}
           initialEntry={editingEntry}
           onClose={() => setEditingEntry(null)}
           onSave={(patch) => { updateEntry(editingEntry.id, patch); setEditingEntry(null); }}
@@ -924,7 +932,7 @@ function SearchView({ query, setQuery, entries, onRequestDelete, onRequestEdit, 
   );
 }
 
-function Composer({ categories, people, onClose, onSave, t, initialEntry }) {
+function Composer({ categories, people, locations, onClose, onSave, t, initialEntry }) {
   const isEdit = !!initialEntry;
   const [text, setText] = useState(initialEntry?.text || "");
   const [category, setCategory] = useState(initialEntry?.category || categories[categories.length - 1]?.id || categories[0].id);
@@ -995,6 +1003,25 @@ function Composer({ categories, people, onClose, onSave, t, initialEntry }) {
               <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("composer_location_ph")} style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }} className="w-full rounded-lg px-3 py-2 outline-none text-sm" />
             </label>
           </div>
+          {locations.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 -mt-2">
+              {locations.map((loc) => (
+                <button
+                  key={loc}
+                  type="button"
+                  onClick={() => setLocation(loc)}
+                  style={{
+                    background: location === loc ? SAGE : INK,
+                    color: location === loc ? INK : TEXT_MUTED,
+                    border: `1px solid ${location === loc ? SAGE : INK_LINE}`,
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-full flex items-center gap-1"
+                >
+                  <MapPin size={10} /> {loc}
+                </button>
+              ))}
+            </div>
+          )}
           <div>
             <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> {t("composer_photo")}</div>
             {image ? (
