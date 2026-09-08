@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { CATEGORY_ICONS } from "../../lib/categoryIcons";
 import { t } from "../../lib/i18n";
+import { createSaveQueue } from "../../lib/saveQueue";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
@@ -209,7 +210,7 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const dataVersion = useRef(null);
+  const saveQueue = useRef(null);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [viewingImage, setViewingImage] = useState(null);
@@ -229,7 +230,18 @@ export default function Dashboard() {
       setEntries(data.entries);
       setPeople(data.people);
       setCategories(data.categories);
-      dataVersion.current = data.updatedAt;
+
+      // สร้างคิวบันทึกครั้งเดียวตอนโหลดเสร็จ แล้วใช้ตัวเดิมตลอดอายุหน้านี้
+      saveQueue.current = createSaveQueue({
+        send: (payload) =>
+          saveBundle(payload.entries, payload.people, payload.categories, payload.baseUpdatedAt),
+        onStatusChange: ({ saving, error }) => {
+          setSaveTick(saving);
+          setSaveError(error || "");
+        },
+      });
+      saveQueue.current.setVersion(data.updatedAt);
+
       setBooting(false);
     })();
   }, [status, session]);
@@ -244,19 +256,13 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [status, session]);
 
+  // ส่งเข้าคิวบันทึก — เรียกถี่แค่ไหนก็ได้ คิวจะรวบและทยอยส่งให้เองทีละตัว
   const persist = (nextEntries, nextPeople, nextCategories) => {
-    if (!session?.user?.email) return;
-    setSaveTick(true);
-    setSaveError("");
-    saveBundle(nextEntries, nextPeople, nextCategories, dataVersion.current).then((result) => {
-      setTimeout(() => setSaveTick(false), 700);
-      // สำคัญ: ต้องบอก user เสมอถ้าเซฟไม่สำเร็จ ห้ามเงียบเด็ดขาด
-      // (ของเดิมกลืน error ทิ้งแล้วยังโชว์ว่า "บันทึกแล้ว" ทำให้ข้อมูลหายโดยไม่รู้ตัว)
-      if (!result.ok) {
-        setSaveError(result.reason);
-      } else {
-        dataVersion.current = result.updatedAt;
-      }
+    if (!session?.user?.email || !saveQueue.current) return;
+    saveQueue.current.enqueue({
+      entries: nextEntries,
+      people: nextPeople,
+      categories: nextCategories,
     });
   };
 
@@ -1063,6 +1069,13 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
     setImage(null);
   };
 
+  // ปิด/ยกเลิกหน้าต่างโดยไม่กดบันทึก — ถ้าเพิ่งอัปโหลดรูปใหม่ไว้ ต้องลบไฟล์ทิ้ง
+  // ไม่งั้นไฟล์จะค้างใน Storage ทั้งที่ไม่มีความทรงจำไหนอ้างถึงเลย (ขยะถาวร)
+  const handleClose = () => {
+    if (image && image !== initialEntry?.image) deleteOrphanPhoto(image);
+    onClose();
+  };
+
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   const addTypedPerson = () => {
     if (newPerson.trim()) {
@@ -1083,7 +1096,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
       <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "90vh" }} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
         <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">
           <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">{isEdit ? t("composer_edit_title") : t("composer_title")}</span>
-          <button onClick={onClose}><X size={18} style={{ color: TEXT_FAINT }} /></button>
+          <button onClick={handleClose}><X size={18} style={{ color: TEXT_FAINT }} /></button>
         </div>
         <div className="overflow-y-auto px-5 py-4 flex flex-col gap-4">
           <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t("composer_placeholder")} rows={4}
@@ -1173,7 +1186,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
           </div>
         </div>
         <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="px-5 py-4 flex justify-end gap-2">
-          <button onClick={onClose} style={{ color: TEXT_MUTED }} className="text-sm px-4 py-2">{t("composer_cancel")}</button>
+          <button onClick={handleClose} style={{ color: TEXT_MUTED }} className="text-sm px-4 py-2">{t("composer_cancel")}</button>
           <button onClick={save} disabled={!text.trim()} style={{ background: text.trim() ? GOLD : INK_LINE, color: text.trim() ? INK : TEXT_FAINT }} className="text-sm px-4 py-2 rounded-lg font-medium flex items-center gap-1.5">
             <Check size={14} /> {isEdit ? t("composer_save_changes") : t("composer_save")}
           </button>

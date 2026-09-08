@@ -4,7 +4,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff } from "lucide-react";
+import { Brain } from "lucide-react";
+import PasswordField from "../../components/PasswordField";
 import { t } from "../../lib/i18n";
 import ShatterTransition from "../../components/ShatterTransition";
 
@@ -30,7 +31,6 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [shattering, setShattering] = useState(false);
@@ -118,23 +118,12 @@ function LoginForm() {
                 required
               />
             </label>
-            <label className="block">
-              <span style={{ color: TEXT_MUTED }} className="text-xs">{t("password_label")}</span>
-              <div className="relative mt-1">
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                  className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                  required
-                />
-                <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                  {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                </button>
-              </div>
-            </label>
+            <PasswordField
+              label={t("password_label")}
+              value={password}
+              onChange={setPassword}
+              required
+            />
 
             {error && (
               <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>

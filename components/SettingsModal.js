@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { X, LogOut, Eye, EyeOff, Check } from "lucide-react";
+import { X, LogOut, Check } from "lucide-react";
+import PasswordField from "./PasswordField";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -26,8 +27,6 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
   const [username, setUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -175,39 +174,19 @@ export default function SettingsModal({ open, onClose, user, onLogout, t }) {
                       Cancel
                     </button>
                   </div>
-                  <label className="block">
-                    <span style={{ color: TEXT_MUTED }} className="text-xs">New password</span>
-                    <div className="relative mt-1">
-                      <input
-                        autoFocus
-                        type={showPw ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="At least 8 characters"
-                        style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                        className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                      />
-                      <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                        {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                      </button>
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span style={{ color: TEXT_MUTED }} className="text-xs">Confirm new password</span>
-                    <div className="relative mt-1">
-                      <input
-                        type={showConfirmPw ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Re-enter new password"
-                        style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                        className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                      />
-                      <button type="button" onClick={() => setShowConfirmPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                        {showConfirmPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                      </button>
-                    </div>
-                  </label>
+                  <PasswordField
+                    label="New password"
+                    value={newPassword}
+                    onChange={setNewPassword}
+                    placeholder="At least 8 characters"
+                    autoFocus
+                  />
+                  <PasswordField
+                    label="Confirm new password"
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                    placeholder="Re-enter new password"
+                  />
                 </div>
               )}
             </div>

@@ -6,7 +6,9 @@ import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  // บัญชี admin ไม่ใช่ user จริงในตาราง users — ถ้าปล่อยผ่านจะทำให้เขียนข้อมูลชนกับ
+  // foreign key แล้วพังเงียบ ๆ ต้องกันไว้ที่ชั้น API เองด้วย ไม่พึ่งการ redirect ฝั่งหน้าเว็บอย่างเดียว
+  if (!session?.user?.email || session.user.email === "__admin__") {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -25,7 +27,9 @@ export async function GET() {
 
 export async function PATCH(request) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  // บัญชี admin ไม่ใช่ user จริงในตาราง users — ถ้าปล่อยผ่านจะทำให้เขียนข้อมูลชนกับ
+  // foreign key แล้วพังเงียบ ๆ ต้องกันไว้ที่ชั้น API เองด้วย ไม่พึ่งการ redirect ฝั่งหน้าเว็บอย่างเดียว
+  if (!session?.user?.email || session.user.email === "__admin__") {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

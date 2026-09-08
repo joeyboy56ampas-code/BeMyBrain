@@ -4,7 +4,8 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { Brain, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Brain, CheckCircle2 } from "lucide-react";
+import PasswordField from "../../components/PasswordField";
 import { t } from "../../lib/i18n";
 
 const INK = "#15131F";
@@ -48,7 +49,6 @@ function SignupInner() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -181,36 +181,19 @@ function SignupInner() {
                   required
                 />
               </label>
-              <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("password_hint_label")}</span>
-                <div className="relative mt-1">
-                  <input
-                    type={showPw ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                    className="w-full rounded-lg px-3 py-2 pr-9 outline-none text-sm"
-                    required
-                    minLength={8}
-                  />
-                  <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-2.5 top-2.5">
-                    {showPw ? <EyeOff size={15} style={{ color: TEXT_FAINT }} /> : <Eye size={15} style={{ color: TEXT_FAINT }} />}
-                  </button>
-                </div>
-              </label>
-              <label className="block">
-                <span style={{ color: TEXT_MUTED }} className="text-xs">{t("confirm_password_label")}</span>
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="••••••••"
-                  style={{ background: INK, border: `1px solid ${INK_LINE}`, color: PAPER }}
-                  className="w-full mt-1 rounded-lg px-3 py-2 outline-none text-sm"
-                  required
-                />
-              </label>
+              <PasswordField
+                label={t("password_hint_label")}
+                value={password}
+                onChange={setPassword}
+                required
+                minLength={8}
+              />
+              <PasswordField
+                label={t("confirm_password_label")}
+                value={confirm}
+                onChange={setConfirm}
+                required
+              />
 
               {error && <p style={{ color: "#E38E8E" }} className="text-xs">{error}</p>}
 
