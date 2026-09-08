@@ -5,13 +5,16 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, MapPin, Users, Calendar, LayoutGrid, Rows,
-  Briefcase, Heart, Activity, Home, Sparkles, Star, Image as ImageIcon,
-  ChevronRight, Check, Brain, LogOut, Trash2, Settings2, Globe, Pencil
+  Star, Image as ImageIcon,
+  ChevronRight, Check, Brain, Trash2, Settings2, Pencil
 } from "lucide-react";
+import { CATEGORY_ICONS } from "../../lib/categoryIcons";
 import { makeT } from "../../lib/i18n";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
+import ManageLocationsModal from "../../components/ManageLocationsModal";
+import SettingsModal from "../../components/SettingsModal";
 import MobileNav from "../../components/MobileNav";
 
 const INK = "#15131F";
@@ -34,7 +37,7 @@ const DEFAULT_CATEGORIES = [
   { id: "family", label: "ครอบครัว", icon: "Home" },
   { id: "general", label: "ทั่วไป", icon: "Sparkles" },
 ];
-const ICONS = { Briefcase, Heart, Activity, Home, Sparkles };
+const ICONS = CATEGORY_ICONS;
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const fmtDate = (iso) => {
@@ -140,6 +143,8 @@ export default function Dashboard() {
   const [showComposer, setShowComposer] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
   const [showManagePeople, setShowManagePeople] = useState(false);
+  const [showManageLocations, setShowManageLocations] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [query, setQuery] = useState("");
   const [saveTick, setSaveTick] = useState(false);
   const [pendingDeleteEntry, setPendingDeleteEntry] = useState(null);
@@ -257,14 +262,38 @@ export default function Dashboard() {
     if (activeFilter === name) setActiveFilter(null);
   };
 
-  const addCategory = (label) => {
-    const next = [...categories, { id: uid(), label, icon: "Sparkles" }];
+  // เปลี่ยนชื่อสถานที่ — อัปเดตทุกความทรงจำที่เคยใช้ชื่อสถานที่เดิม
+  const renameLocation = (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    const nextEntries = entries.map((e) => (e.location === oldName ? { ...e, location: trimmed } : e));
+    setEntries(nextEntries);
+    persist(nextEntries, people, categories);
+    if (activeFilter === oldName) setActiveFilter(trimmed);
+  };
+
+  // ลบสถานที่ — แค่เอาแท็กสถานที่ออกจากความทรงจำ ไม่ลบความทรงจำทิ้ง (เหมือนกับลบบุคคล)
+  const deleteLocationTag = (name) => {
+    const nextEntries = entries.map((e) => (e.location === name ? { ...e, location: "" } : e));
+    setEntries(nextEntries);
+    persist(nextEntries, people, categories);
+    if (activeFilter === name) setActiveFilter(null);
+  };
+
+  const addCategory = (label, icon = "Sparkles") => {
+    const next = [...categories, { id: uid(), label, icon }];
     setCategories(next);
     persist(entries, people, next);
   };
 
   const renameCategory = (id, label) => {
     const next = categories.map((c) => (c.id === id ? { ...c, label } : c));
+    setCategories(next);
+    persist(entries, people, next);
+  };
+
+  const changeCategoryIcon = (id, icon) => {
+    const next = categories.map((c) => (c.id === id ? { ...c, icon } : c));
     setCategories(next);
     persist(entries, people, next);
   };
@@ -295,13 +324,14 @@ export default function Dashboard() {
         onOpenCategory={(id) => { setView("category"); setActiveFilter(id); }}
         categories={categories} saving={saveTick} t={t}
         onManageCategories={() => setShowManageCategories(true)}
+        onOpenSettings={() => setShowSettings(true)}
       />
       <main className="flex-1 min-w-0 flex flex-col" style={{ maxHeight: "100vh" }}>
         <TopBar
           query={query} setQuery={setQuery} onSearch={() => setView("search")} onCompose={() => setShowComposer(true)}
-          lang={lang} onToggleLang={toggleLang} t={t} user={user}
+          t={t} user={user}
           onManageCategories={() => setShowManageCategories(true)}
-          onLogout={() => signOut({ callbackUrl: "/login" })}
+          onOpenSettings={() => setShowSettings(true)}
         />
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-24 md:pb-10">
           {view === "category" && !activeFilter && (
@@ -318,7 +348,8 @@ export default function Dashboard() {
           )}
           {view === "location" && (
             <LocationView entries={entries} active={activeFilter} onOpen={setActiveFilter}
-              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage} t={t} />
+              onRequestDelete={setPendingDeleteEntry} onRequestEdit={setEditingEntry} onImageClick={setViewingImage}
+              onManageLocations={() => setShowManageLocations(true)} t={t} />
           )}
           {view === "people" && (
             <PeopleView people={peopleRoster} entries={entries} active={activeFilter} onOpen={setActiveFilter}
@@ -364,6 +395,7 @@ export default function Dashboard() {
         t={t}
         onAdd={addCategory}
         onRename={renameCategory}
+        onChangeIcon={changeCategoryIcon}
         onDelete={deleteCategory}
       />
 
@@ -376,6 +408,25 @@ export default function Dashboard() {
         onRename={renamePerson}
         onDelete={deletePerson}
         onToggleFavorite={toggleFavorite}
+      />
+
+      <ManageLocationsModal
+        open={showManageLocations}
+        onClose={() => setShowManageLocations(false)}
+        entries={entries}
+        t={t}
+        onRename={renameLocation}
+        onDelete={deleteLocationTag}
+      />
+
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        user={user}
+        lang={lang}
+        onToggleLang={toggleLang}
+        onLogout={() => signOut({ callbackUrl: "/login" })}
+        t={t}
       />
 
       <ConfirmDialog
@@ -436,7 +487,7 @@ function DashboardSkeleton() {
 }
 
 /* ---------------- sidebar / top bar ---------------- */
-function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, onManageCategories }) {
+function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, onManageCategories, onOpenSettings }) {
   const items = [
     { id: "category", label: t("nav_categories"), icon: LayoutGrid },
     { id: "timeline", label: t("nav_timeline"), icon: Rows },
@@ -465,7 +516,7 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, o
       <div style={{ color: TEXT_FAINT }} className="px-3 text-xs uppercase tracking-wide mb-2">{t("categories_title")}</div>
       <div className="flex flex-col gap-0.5 mb-3 overflow-y-auto">
         {categories.map((c) => {
-          const Icon = ICONS[c.icon] || Sparkles;
+          const Icon = ICONS[c.icon] || ICONS.Sparkles;
           return (
             <button key={c.id} onClick={() => onOpenCategory(c.id)} style={{ color: TEXT_MUTED }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-white/5">
@@ -483,7 +534,7 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, o
         <span style={{ width: 6, height: 6, borderRadius: 999, background: saving ? GOLD : SAGE, opacity: saving ? 1 : 0.6 }} />
         <span style={{ color: TEXT_FAINT }} className="text-xs">{saving ? t("saving") : t("saved")}</span>
       </div>
-      <div style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3 px-2 flex items-center gap-2">
+      <button onClick={onOpenSettings} style={{ borderTop: `1px solid ${INK_LINE}` }} className="pt-3 px-2 flex items-center gap-2 hover:bg-white/5 rounded-lg -mx-2 pb-1">
         {user.image ? (
           <img src={user.image} alt="" className="w-7 h-7 rounded-full" />
         ) : (
@@ -491,22 +542,20 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, t, o
             {(user.name || "?").slice(0, 1).toUpperCase()}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 text-left">
           <div style={{ color: PAPER }} className="text-xs truncate">{user.name}</div>
           <div style={{ color: TEXT_FAINT }} className="text-xs truncate">{user.email}</div>
         </div>
-        <button onClick={() => signOut({ callbackUrl: "/login" })} title={t("logout")}>
-          <LogOut size={14} style={{ color: TEXT_FAINT }} />
-        </button>
-      </div>
+        <Settings2 size={14} style={{ color: TEXT_FAINT }} />
+      </button>
     </aside>
   );
 }
 
-function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, onManageCategories, onLogout, user }) {
+function TopBar({ query, setQuery, onSearch, onCompose, t, onManageCategories, user, onOpenSettings }) {
   return (
     <div>
-      <div className="md:hidden flex items-center gap-2 px-4 pt-4">
+      <button onClick={onOpenSettings} className="md:hidden flex items-center gap-2 px-4 pt-4 w-full text-left">
         {user?.image ? (
           <img src={user.image} alt="" className="w-6 h-6 rounded-full shrink-0" />
         ) : (
@@ -515,7 +564,7 @@ function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, o
           </div>
         )}
         <span style={{ color: PAPER }} className="text-sm truncate">{user?.name}</span>
-      </div>
+      </button>
       <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-8 py-4">
       <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="flex-1 flex items-center gap-2 rounded-full px-4 py-2 min-w-0">
         <Search size={15} style={{ color: TEXT_FAINT }} className="shrink-0" />
@@ -525,21 +574,8 @@ function TopBar({ query, setQuery, onSearch, onCompose, lang, onToggleLang, t, o
           className="flex-1 min-w-0 outline-none text-sm" />
       </div>
 
-      <button
-        onClick={onToggleLang}
-        style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
-        className="shrink-0 flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium"
-        title="Switch language / เปลี่ยนภาษา"
-      >
-        <Globe size={13} /> {lang === "th" ? "TH" : "EN"}
-      </button>
-
       <button onClick={onManageCategories} className="md:hidden shrink-0 rounded-full p-2" style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} title={t("manage_categories")}>
         <Settings2 size={15} style={{ color: TEXT_MUTED }} />
-      </button>
-
-      <button onClick={onLogout} className="md:hidden shrink-0 rounded-full p-2" style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} title={t("logout")}>
-        <LogOut size={15} style={{ color: TEXT_MUTED }} />
       </button>
 
       <button
@@ -644,7 +680,7 @@ function CategoryGrid({ categories, entries, onOpen, t }) {
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("categories_title")}</h1>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {categories.map((c) => {
-          const Icon = ICONS[c.icon] || Sparkles;
+          const Icon = ICONS[c.icon] || ICONS.Sparkles;
           const count = entries.filter((e) => e.category === c.id).length;
           return (
             <button key={c.id} onClick={() => onOpen(c.id)} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }}
@@ -754,7 +790,7 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdi
   );
 }
 
-function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit, onImageClick, t }) {
+function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit, onImageClick, onManageLocations, t }) {
   const locations = useMemo(() => {
     const map = {};
     entries.forEach((e) => { if (!e.location) return; if (!map[e.location]) map[e.location] = []; map[e.location].push(e); });
@@ -778,7 +814,18 @@ function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit,
   const keys = Object.keys(locations);
   return (
     <div className="pt-8">
-      <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("locations_title")}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }}>{t("locations_title")}</h1>
+        {keys.length > 0 && (
+          <button
+            onClick={onManageLocations}
+            style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, color: TEXT_MUTED }}
+            className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium shrink-0"
+          >
+            <Settings2 size={13} /> {t("manage_locations")}
+          </button>
+        )}
+      </div>
       {keys.length === 0 ? <EmptyState text={t("empty_locations")} /> : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {keys.map((loc) => (
