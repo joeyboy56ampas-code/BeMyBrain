@@ -1210,6 +1210,28 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
     }
   };
 
+  // เอารูป/วิดีโอออก — ถ้าเป็นสื่อที่เพิ่งอัปโหลดใหม่ในรอบนี้ (ยังไม่เคยเซฟ) ให้ลบไฟล์ทิ้งเลย
+  // แต่ถ้าเป็นของเดิมของความทรงจำที่กำลังแก้อยู่ อย่าเพิ่งลบ เผื่อ user กดยกเลิก
+  const removeImage = () => {
+    if (image && image !== initialEntry?.image) {
+      deleteOrphanPhoto(image);
+      if (thumbnail && thumbnail !== initialEntry?.thumbnail) deleteOrphanPhoto(thumbnail);
+    }
+    setImage(null);
+    setThumbnail(null);
+    setMediaType(null);
+  };
+
+  // ปิด/ยกเลิกหน้าต่างโดยไม่กดบันทึก — ถ้าเพิ่งอัปโหลดสื่อใหม่ไว้ ต้องลบไฟล์ทิ้ง
+  // ไม่งั้นไฟล์จะค้างใน Storage ทั้งที่ไม่มีความทรงจำไหนอ้างถึงเลย (ขยะถาวร)
+  const handleClose = () => {
+    if (image && image !== initialEntry?.image) {
+      deleteOrphanPhoto(image);
+      if (thumbnail && thumbnail !== initialEntry?.thumbnail) deleteOrphanPhoto(thumbnail);
+    }
+    onClose();
+  };
+
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
   const addTypedPerson = () => {
     if (newPerson.trim()) {
