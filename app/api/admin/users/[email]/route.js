@@ -44,21 +44,47 @@ export async function DELETE(request, { params }) {
 
   const email = decodeURIComponent(params.email);
 
-  // ถ้าเข้าถึงผ่านบัญชี Google/username จริง (ไม่ใช่ผ่านรหัส admin) ห้ามลบบัญชีตัวเองพลาด
   const session = await getServerSession(authOptions);
   if (session?.user?.email && email.toLowerCase() === session.user.email.toLowerCase()) {
     return NextResponse.json({ error: "cannot_delete_self" }, { status: 400 });
   }
 
-  // ลบไฟล์รูปของ user คนนี้ใน Storage ด้วย ไม่งั้นไฟล์ค้างกินพื้นที่
-  await deleteUserPhotos(email);
+  // *** ทุกขั้นตอนต้องเช็ค error จริง — ห้ามสมมติว่าสำเร็จเฉย ๆ ***
+  // เดิมบางขั้นตอนไม่เช็ค error เลย ถ้าขั้นไหนพังแบบเงียบ ๆ บัญชีจะหาย
+  // จากรายชื่อ (เพราะ users ถูกลบสำเร็จ) แต่ไฟล์/ข้อมูลจริงยังค้างอยู่ ไม่มีใครรู้
+  const steps = [];
 
-  await supabaseAdmin.from("brain_data").delete().eq("user_email", email);
-  await supabaseAdmin.from("presence").delete().eq("user_email", email);
-  const { error } = await supabaseAdmin.from("users").delete().eq("email", email);
+  try {
+    await deleteUserPhotos(email);
+    steps.push("storage:ok");
+  } catch (e) {
+    console.error("delete user: storage cleanup failed", e);
+    steps.push("storage:failed");
+    // ไม่ return ทันที — ยังพยายามลบข้อมูลที่เหลือต่อ แต่จะรายงาน error ตอนจบ
+  }
 
-  if (error) {
-    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
+  const { error: brainError } = await supabaseAdmin.from("brain_data").delete().eq("user_email", email);
+  if (brainError) {
+    console.error("delete user: brain_data delete failed", brainError);
+    return NextResponse.json({ error: "delete_failed", step: "brain_data", detail: brainError.message }, { status: 500 });
+  }
+
+  const { error: presenceError } = await supabaseAdmin.from("presence").delete().eq("user_email", email);
+  if (presenceError) {
+    console.error("delete user: presence delete failed", presenceError);
+    return NextResponse.json({ error: "delete_failed", step: "presence", detail: presenceError.message }, { status: 500 });
+  }
+
+  const { error: userDeleteError } = await supabaseAdmin.from("users").delete().eq("email", email);
+  if (userDeleteError) {
+    console.error("delete user: users delete failed", userDeleteError);
+    return NextResponse.json({ error: "delete_failed", step: "users", detail: userDeleteError.message }, { status: 500 });
+  }
+
+  if (steps.includes("storage:failed")) {
+    // ข้อมูลในฐานข้อมูลลบครบแล้ว แต่ไฟล์รูป/วิดีโออาจมีบางส่วนค้างใน Storage
+    // แจ้งตรง ๆ แทนที่จะบอกว่าสำเร็จเฉย ๆ ทั้งที่ไม่ครบจริง
+    return NextResponse.json({ ok: true, warning: "storage_cleanup_incomplete" });
   }
 
   return NextResponse.json({ ok: true });

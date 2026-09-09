@@ -297,13 +297,25 @@ export default function Dashboard() {
       setPeople(data.people);
       setCategories(data.categories);
 
-      // สร้างคิวบันทึกครั้งเดียว แล้วใช้ตัวเดิมตลอดอายุหน้านี้ (ห้ามสร้างใหม่ระหว่างทาง)
+      // เมื่อเซฟชนกัน (ข้อมูลถูกแก้จากที่อื่น เช่น admin ลบความทรงจำอันหนึ่งไป) —
+      // เดิมระบบจะค้าง "version เก่า" ไว้ตลอดไป ทำให้เซฟอะไรไม่ได้อีกเลยจนกว่าจะรีเฟรชเว็บเอง
+      // ตอนนี้ให้ดึงข้อมูลล่าสุดมาซิงก์ให้อัตโนมัติทันทีที่เจอการชนกัน เพื่อปลดล็อกให้เซฟต่อได้
+      // (การเปลี่ยนแปลงที่ user เพิ่งกดไปตอนชนกันพอดี จะไม่ถูกเซฟ ต้องทำซ้ำ — ข้อความแจ้งเตือนบอกไว้ชัดเจน)
+      const resyncAfterConflict = async () => {
+        const fresh = await loadBundle();
+        setEntries(fresh.entries);
+        setPeople(fresh.people);
+        setCategories(fresh.categories);
+        if (saveQueue.current) saveQueue.current.setVersion(fresh.updatedAt);
+      };
+
       saveQueue.current = createSaveQueue({
         send: (payload) =>
           saveBundle(payload.entries, payload.people, payload.categories, payload.baseUpdatedAt),
         onStatusChange: ({ saving, error }) => {
           setSaveTick(saving);
           setSaveError(error || "");
+          if (error === "conflict") resyncAfterConflict();
         },
       });
       saveQueue.current.setVersion(data.updatedAt);

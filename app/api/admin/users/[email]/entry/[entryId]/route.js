@@ -22,11 +22,17 @@ export async function DELETE(request, { params }) {
   }
 
   const allEntries = row.payload?.entries || [];
-  // ลบไฟล์รูปของความทรงจำนี้ใน Storage ด้วย (ถ้ามี) ก่อนเอาออกจาก payload
   const target = allEntries.find((e) => e.id === entryId);
-  if (target?.image) await deletePhotoByUrl(target.image);
-  // วิดีโอมีไฟล์ภาพปกแยกอีกไฟล์ ต้องลบด้วย ไม่งั้นค้างเป็นขยะ
-  if (target?.thumbnail) await deletePhotoByUrl(target.thumbnail);
+
+  // ลบไฟล์รูป/ภาพปกใน Storage ก่อน — ถ้าพังไม่ให้ทั้ง route ล่ม แค่บันทึกไว้เตือนตอนจบ
+  let storageWarning = false;
+  try {
+    if (target?.image) await deletePhotoByUrl(target.image);
+    if (target?.thumbnail) await deletePhotoByUrl(target.thumbnail);
+  } catch (e) {
+    console.error("delete entry: storage cleanup failed", e);
+    storageWarning = true;
+  }
 
   const nextEntries = allEntries.filter((e) => e.id !== entryId);
   const nextPayload = { ...row.payload, entries: nextEntries };
@@ -40,5 +46,5 @@ export async function DELETE(request, { params }) {
     return NextResponse.json({ error: "delete_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, warning: storageWarning ? "storage_cleanup_incomplete" : undefined });
 }

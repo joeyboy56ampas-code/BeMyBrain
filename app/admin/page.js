@@ -206,6 +206,11 @@ export default function AdminPage() {
       setPendingDeleteUser(null);
       return;
     }
+    const data = await res.json();
+    if (data.warning === "storage_cleanup_incomplete") {
+      // ข้อมูลในฐานข้อมูลลบครบแล้ว แต่ไฟล์ในหน้า Storage อาจมีค้าง — บอกตรง ๆ แทนที่จะเงียบ
+      setActionError("Account deleted, but some photo/video files may still remain in Storage. Check the Supabase Storage dashboard manually if needed.");
+    }
     setPendingDeleteUser(null);
     setSelectedEmail(null);
     setDetail(null);

@@ -9,21 +9,36 @@ export async function POST(request) {
   }
 
   const { confirm } = await request.json();
-  // ต้องพิมพ์คำยืนยันตรงตัวเป๊ะ ๆ เท่านั้น กันการกดพลาด
   if (confirm !== "WIPE ALL DATA") {
     return NextResponse.json({ error: "confirmation_mismatch" }, { status: 400 });
   }
 
-  // ต้องลบไฟล์รูปใน Storage ด้วย ไม่งั้นไฟล์จะค้างกินพื้นที่ตลอดไปแม้ลบบัญชีไปแล้ว
-  await deleteAllPhotos();
-
-  await supabaseAdmin.from("brain_data").delete().neq("user_email", "");
-  await supabaseAdmin.from("presence").delete().neq("user_email", "");
-  const { error } = await supabaseAdmin.from("users").delete().neq("email", "");
-
-  if (error) {
-    return NextResponse.json({ error: "wipe_failed" }, { status: 500 });
+  // ต้องเช็ค error ทุกขั้นตอน — ยืนยันจริงว่าลบสำเร็จ ไม่ใช่แค่สมมติว่าสำเร็จ
+  let storageWarning = false;
+  try {
+    await deleteAllPhotos();
+  } catch (e) {
+    console.error("wipe-all: storage cleanup failed", e);
+    storageWarning = true;
   }
 
-  return NextResponse.json({ ok: true });
+  const { error: brainError } = await supabaseAdmin.from("brain_data").delete().neq("user_email", "");
+  if (brainError) {
+    console.error("wipe-all: brain_data delete failed", brainError);
+    return NextResponse.json({ error: "wipe_failed", step: "brain_data", detail: brainError.message }, { status: 500 });
+  }
+
+  const { error: presenceError } = await supabaseAdmin.from("presence").delete().neq("user_email", "");
+  if (presenceError) {
+    console.error("wipe-all: presence delete failed", presenceError);
+    return NextResponse.json({ error: "wipe_failed", step: "presence", detail: presenceError.message }, { status: 500 });
+  }
+
+  const { error: usersError } = await supabaseAdmin.from("users").delete().neq("email", "");
+  if (usersError) {
+    console.error("wipe-all: users delete failed", usersError);
+    return NextResponse.json({ error: "wipe_failed", step: "users", detail: usersError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, warning: storageWarning ? "storage_cleanup_incomplete" : undefined });
 }
