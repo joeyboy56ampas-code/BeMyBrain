@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ShatterTransition from "../../components/ShatterTransition";
+import MediaThumb from "../../components/MediaThumb";
+import { guessMediaType } from "../../lib/mediaConfig";
 import {
   Shield, Users, HardDrive, Activity, Trash2, X, AlertTriangle,
   ChevronRight, MapPin, Loader2, LogOut, Search, Brain, Image as ImageIcon, Database,
@@ -540,7 +542,11 @@ export default function AdminPage() {
                   <div key={e.id} style={{ background: BG, border: `1px solid ${LINE}` }} className="rounded p-3 flex items-start gap-3">
                     {e.image && (
                       <button onClick={() => setLightboxImage(e.image)} className="shrink-0">
-                        <img src={e.image} alt="" className="w-16 h-16 rounded object-cover" style={{ border: `1px solid ${LINE}` }} />
+                        <MediaThumb
+                          src={e.image}
+                          mediaType={e.mediaType}
+                          className="w-16 h-16 rounded object-cover"
+                        />
                       </button>
                     )}
                     <div className="flex-1 min-w-0">
@@ -606,12 +612,23 @@ export default function AdminPage() {
           <button onClick={() => setLightboxImage(null)} style={{ background: "rgba(255,255,255,0.1)" }} className="absolute top-5 right-5 p-2 rounded-full">
             <X size={18} style={{ color: "#fff" }} />
           </button>
-          <img
-            src={lightboxImage}
-            alt=""
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-full rounded object-contain cursor-default"
-          />
+          {guessMediaType(lightboxImage) === "video" ? (
+            <video
+              src={lightboxImage}
+              controls
+              autoPlay
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-full rounded cursor-default"
+            />
+          ) : (
+            <img
+              src={lightboxImage}
+              alt=""
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-full rounded object-contain cursor-default"
+            />
+          )}
         </div>
       )}
     </div>

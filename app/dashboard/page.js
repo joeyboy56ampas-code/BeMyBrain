@@ -11,6 +11,8 @@ import {
 import { CATEGORY_ICONS } from "../../lib/categoryIcons";
 import { t } from "../../lib/i18n";
 import { createSaveQueue } from "../../lib/saveQueue";
+import { isVideoFile, MAX_VIDEO_BYTES, guessMediaType } from "../../lib/mediaConfig";
+import MediaThumb from "../../components/MediaThumb";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ManageCategoriesModal from "../../components/ManageCategoriesModal";
 import ManagePeopleModal from "../../components/ManagePeopleModal";
@@ -725,7 +727,11 @@ function EntryCard({ entry, onRequestDelete, onRequestEdit, onImageClick }) {
       </div>
       {entry.image && (
         <button onClick={() => onImageClick && onImageClick(entry.image)} className="block">
-          <img src={entry.image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg mb-1 cursor-zoom-in" />
+          <MediaThumb
+            src={entry.image}
+            mediaType={entry.mediaType}
+            className="w-full aspect-[16/9] object-cover rounded-lg mb-1"
+          />
         </button>
       )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
@@ -761,12 +767,24 @@ function ImageLightbox({ src, onClose }) {
       >
         <X size={18} style={{ color: "#fff" }} />
       </button>
-      <img
-        src={src}
-        alt=""
-        onClick={(e) => e.stopPropagation()}
-        className="max-w-full max-h-full rounded-lg object-contain cursor-default"
-      />
+      {guessMediaType(src) === "video" ? (
+        // วิดีโอ: เล่นได้จริง มีปุ่มควบคุมครบ และเล่นอัตโนมัติเมื่อเปิดดู
+        <video
+          src={src}
+          controls
+          autoPlay
+          playsInline
+          onClick={(e) => e.stopPropagation()}
+          className="max-w-full max-h-full rounded-lg cursor-default"
+        />
+      ) : (
+        <img
+          src={src}
+          alt=""
+          onClick={(e) => e.stopPropagation()}
+          className="max-w-full max-h-full rounded-lg object-contain cursor-default"
+        />
+      )}
     </div>
   );
 }
@@ -878,7 +896,7 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdi
               </div>
               {e.image ? (
                 <button onClick={() => onImageClick && onImageClick(e.image)} className="block w-full h-full cursor-zoom-in">
-                  <img src={e.image} alt="" className="w-full h-full object-cover" />
+                  <MediaThumb src={e.image} mediaType={e.mediaType} className="w-full h-full object-cover" />
                 </button>
               ) : (
                 <div className="w-full h-full flex items-center justify-center p-3">
@@ -1046,27 +1064,57 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
   const [newPerson, setNewPerson] = useState("");
   const [compressing, setCompressing] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [mediaType, setMediaType] = useState(initialEntry?.mediaType || null);
   const fileRef = useRef(null);
   const favorites = [...people].filter((p) => p.favorite);
   const others = [...people].filter((p) => !p.favorite);
 
+  // อัปโหลดได้ทั้งรูปและวิดีโอ
+  // รูป -> บีบอัดในเบราว์เซอร์ก่อน (เหลือ ~300KB) แล้วค่อยอัป
+  // วิดีโอ -> อัปไฟล์ต้นฉบับตรง ๆ (บีบอัดวิดีโอในเบราว์เซอร์ทำไม่ได้จริงในทางปฏิบัติ)
+  // ทั้งสองแบบยิงตรงเข้า Supabase ไม่ผ่าน Vercel จึงไม่ติดเพดาน 4.5MB
   const handleFile = async (f) => {
     if (!f) return;
+    const video = isVideoFile(f);
+
+    if (video && f.size > MAX_VIDEO_BYTES) {
+      setImageError(t("video_too_large"));
+      return;
+    }
+
     setCompressing(true);
     setImageError("");
     try {
-      // บีบอัดก่อน แล้วอัปโหลดขึ้น Supabase Storage ทันที เก็บแค่ URL ไว้ใน payload
-      // ทำให้ payload เล็กมากตลอดไป ไม่ชนเพดาน 4.5MB ไม่ว่าจะมีรูปกี่ใบ
-      const compressedBlob = await compressImageToBlob(f);
-      const formData = new FormData();
-      formData.append("file", compressedBlob, "photo.jpg");
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) {
+      const blob = video ? f : await compressImageToBlob(f);
+      const contentType = video ? f.type : "image/jpeg";
+      const ext = video ? (f.name.split(".").pop() || "mp4").toLowerCase() : "jpg";
+
+      // 1) ขอลิงก์อัปโหลดชั่วคราวจากเซิร์ฟเวอร์เรา (คำขอเล็กมาก ไม่มีไฟล์แนบ)
+      const urlRes = await fetch("/api/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: video ? "video" : "image", size: blob.size, ext }),
+      });
+      if (!urlRes.ok) {
+        const err = await urlRes.json().catch(() => ({}));
+        setImageError(err.error === "file_too_large" ? t("video_too_large") : t("photo_upload_failed"));
+        return;
+      }
+      const { signedUrl, publicUrl } = await urlRes.json();
+
+      // 2) ยิงไฟล์ตรงเข้า Supabase ด้วยลิงก์นั้น
+      const putRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: blob,
+      });
+      if (!putRes.ok) {
         setImageError(t("photo_upload_failed"));
         return;
       }
-      const data = await res.json();
-      setImage(data.url);
+
+      setImage(publicUrl);
+      setMediaType(video ? "video" : "image");
     } catch (e) {
       setImageError(t("photo_upload_failed"));
     } finally {
@@ -1100,7 +1148,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
     // ถ้าพิมพ์ชื่อคนไว้ในช่องแต่ลืมกด Enter/+ ก่อนกดบันทึก ให้เก็บชื่อนั้นเข้าไปด้วยเสมอ กันข้อมูลตกหล่น
     const pending = newPerson.trim();
     const finalPeople = pending && !selectedPeople.includes(pending) ? [...selectedPeople, pending] : selectedPeople;
-    onSave({ text: text.trim(), category, date, location: location.trim(), image, people: finalPeople });
+    onSave({ text: text.trim(), category, date, location: location.trim(), image, mediaType, people: finalPeople });
   };
 
   return (
@@ -1156,18 +1204,23 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
             <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><ImageIcon size={12} /> {t("composer_photo")}</div>
             {image ? (
               <div className="relative">
-                <img src={image} alt="" className="w-full aspect-[16/9] object-cover rounded-lg" />
+                <MediaThumb
+                  src={image}
+                  mediaType={mediaType}
+                  className="w-full aspect-[16/9] object-cover rounded-lg"
+                  showPlayBadge={false}
+                />
                 <button onClick={() => { removeImage(); }} style={{ background: INK }} className="absolute top-2 right-2 p-1 rounded-full">
                   <X size={13} style={{ color: PAPER }} />
                 </button>
               </div>
             ) : (
               <button onClick={() => fileRef.current?.click()} disabled={compressing} style={{ background: INK, border: `1px dashed ${INK_LINE}`, color: TEXT_FAINT }} className="w-full rounded-lg py-3 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">
-                <Plus size={13} /> {compressing ? t("photo_uploading") : t("composer_add_photo")}
+                <Plus size={13} /> {compressing ? t("photo_uploading") : t("composer_add_media")}
               </button>
             )}
             {imageError && <p style={{ color: "#E38E8E" }} className="text-xs mt-1.5">{imageError}</p>}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+            <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
           </div>
           <div>
             <div style={{ color: TEXT_MUTED }} className="text-xs mb-1.5 flex items-center gap-1"><Users size={12} /> {t("composer_people")}</div>
