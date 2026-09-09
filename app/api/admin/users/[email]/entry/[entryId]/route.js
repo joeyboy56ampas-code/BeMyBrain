@@ -25,6 +25,8 @@ export async function DELETE(request, { params }) {
   // ลบไฟล์รูปของความทรงจำนี้ใน Storage ด้วย (ถ้ามี) ก่อนเอาออกจาก payload
   const target = allEntries.find((e) => e.id === entryId);
   if (target?.image) await deletePhotoByUrl(target.image);
+  // วิดีโอมีไฟล์ภาพปกแยกอีกไฟล์ ต้องลบด้วย ไม่งั้นค้างเป็นขยะ
+  if (target?.thumbnail) await deletePhotoByUrl(target.thumbnail);
 
   const nextEntries = allEntries.filter((e) => e.id !== entryId);
   const nextPayload = { ...row.payload, entries: nextEntries };

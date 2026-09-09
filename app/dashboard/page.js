@@ -59,6 +59,50 @@ const monthKey = (iso) => {
 // เพราะรูปถูกเก็บเป็น base64 ปนอยู่ใน Supabase database (จำกัดที่ 500MB บนแพลนฟรี)
 // ลดขนาดตรงนี้ช่วยยืดอายุพื้นที่เก็บข้อมูลได้มาก
 // บีบอัดรูปแล้วคืนเป็น Blob (สำหรับอัปโหลดขึ้น Storage) — เล็กกว่า base64 ~33%
+// จับ "ภาพปก" จากวิดีโอ (เฟรมประมาณวินาทีแรก) เพื่อใช้แสดงในการ์ด/อัลบั้ม
+//
+// ทำไมต้องทำ: ถ้าปล่อยให้ <video> โหลดเฟรมแรกเอง บนมือถือมักขึ้นจอดำ
+// และยังต้องดาวน์โหลดไฟล์วิดีโอทุกใบในหน้าเดียว ซึ่งเปลืองเน็ตมาก
+// เก็บภาพปกเป็นไฟล์ JPEG เล็ก ๆ แทน โหลดเร็วกว่าหลายสิบเท่า
+function captureVideoThumbnail(file, maxDimension = 800, quality = 0.75) {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      video.playsInline = true;
+
+      const cleanup = () => URL.revokeObjectURL(url);
+      const fail = () => { cleanup(); resolve(null); }; // จับภาพไม่ได้ก็ไม่เป็นไร ยังอัปวิดีโอได้ปกติ
+
+      video.onerror = fail;
+      video.onloadedmetadata = () => {
+        // ข้ามไปสัก 0.5 วิ เพราะเฟรมแรกสุดมักเป็นสีดำ
+        video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+      };
+      video.onseeked = () => {
+        try {
+          let { videoWidth: w, videoHeight: h } = video;
+          if (!w || !h) return fail();
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) { h = Math.round((h * maxDimension) / w); w = maxDimension; }
+            else { w = Math.round((w * maxDimension) / h); h = maxDimension; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+          canvas.toBlob((blob) => { cleanup(); resolve(blob); }, "image/jpeg", quality);
+        } catch (e) { fail(); }
+      };
+
+      video.src = url;
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
 function compressImageToBlob(file, maxDimension = 1600, quality = 0.82) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -143,6 +187,14 @@ async function loadBundle() {
 }
 
 // ลบไฟล์รูปที่ไม่ได้ใช้แล้วออกจาก Storage (best-effort ไม่ต้องรอผล)
+// ลบสื่อของความทรงจำหนึ่งอันให้ครบ ทั้งไฟล์หลักและภาพปกของวิดีโอ
+// (ถ้าลบแต่ไฟล์หลัก ภาพปกจะค้างใน Storage เป็นขยะถาวร)
+function deleteEntryMedia(entry) {
+  if (!entry) return;
+  deleteOrphanPhoto(entry.image);
+  deleteOrphanPhoto(entry.thumbnail);
+}
+
 function deleteOrphanPhoto(url) {
   if (!url || !url.startsWith("http")) return; // base64 เก่าไม่มีไฟล์ให้ลบ
   fetch("/api/photo", {
@@ -302,14 +354,17 @@ export default function Dashboard() {
     setEntries(nextEntries);
     persist(nextEntries, people, categories);
     // ลบไฟล์รูปที่ผูกกับความทรงจำนี้ออกจาก Storage ด้วย
-    if (target?.image) deleteOrphanPhoto(target.image);
+    deleteEntryMedia(target);
   };
 
   // แก้ไขความทรงจำที่มีอยู่แล้ว — รวมการอัปเดต people roster ไว้ในการเซฟครั้งเดียวเหมือน addEntry
   const updateEntry = (id, patch) => {
     // ถ้าเปลี่ยน/เอารูปเดิมออก ต้องลบไฟล์เก่าใน Storage ไม่ให้ค้าง
     const prev = entries.find((e) => e.id === id);
-    if (prev?.image && prev.image !== patch.image) deleteOrphanPhoto(prev.image);
+    if (prev?.image && prev.image !== patch.image) {
+      deleteOrphanPhoto(prev.image);
+      if (prev.thumbnail && prev.thumbnail !== patch.thumbnail) deleteOrphanPhoto(prev.thumbnail);
+    }
 
     const nextEntries = entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
     let nextPeople = [...people];
@@ -400,7 +455,7 @@ export default function Dashboard() {
     if (categories.length <= 1) return;
     const nextCategories = categories.filter((c) => c.id !== id);
     // หมวดหมู่นี้ถูกลบพร้อมความทรงจำข้างใน -> ต้องลบไฟล์รูปของความทรงจำเหล่านั้นด้วย
-    entries.filter((e) => e.category === id && e.image).forEach((e) => deleteOrphanPhoto(e.image));
+    entries.filter((e) => e.category === id).forEach((e) => deleteEntryMedia(e));
     const nextEntries = entries.filter((e) => e.category !== id);
     setCategories(nextCategories);
     setEntries(nextEntries);
@@ -726,13 +781,14 @@ function EntryCard({ entry, onRequestDelete, onRequestEdit, onImageClick }) {
         )}
       </div>
       {entry.image && (
-        <button onClick={() => onImageClick && onImageClick(entry.image)} className="block">
-          <MediaThumb
-            src={entry.image}
-            mediaType={entry.mediaType}
-            className="w-full aspect-[16/9] object-cover rounded-lg mb-1"
-          />
-        </button>
+        <MediaThumb
+          src={entry.image}
+          mediaType={entry.mediaType}
+          thumbnail={entry.thumbnail}
+          onClick={() => onImageClick && onImageClick(entry.image)}
+          autoPlay
+          className="w-full aspect-[16/9] object-cover rounded-lg mb-1"
+        />
       )}
       <span style={{ color: GOLD_SOFT }} className="text-xs font-medium">{fmtDate(entry.date)}</span>
       <p className="leading-relaxed">{entry.text}</p>
@@ -769,7 +825,7 @@ function ImageLightbox({ src, onClose }) {
       </button>
       {guessMediaType(src) === "video" ? (
         // วิดีโอ: เล่นได้จริง มีปุ่มควบคุมครบ และเล่นอัตโนมัติเมื่อเปิดดู
-        <video
+        <video disablePictureInPicture
           src={src}
           controls
           autoPlay
@@ -895,9 +951,14 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdi
                 )}
               </div>
               {e.image ? (
-                <button onClick={() => onImageClick && onImageClick(e.image)} className="block w-full h-full cursor-zoom-in">
-                  <MediaThumb src={e.image} mediaType={e.mediaType} className="w-full h-full object-cover" />
-                </button>
+                <MediaThumb
+                  src={e.image}
+                  mediaType={e.mediaType}
+                  thumbnail={e.thumbnail}
+                  onClick={() => onImageClick && onImageClick(e.image)}
+                  autoPlay
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center p-3">
                   <span style={{ color: INK }} className="text-xs line-clamp-4">{e.text}</span>
@@ -1065,9 +1126,31 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
   const [compressing, setCompressing] = useState(false);
   const [imageError, setImageError] = useState("");
   const [mediaType, setMediaType] = useState(initialEntry?.mediaType || null);
+  const [thumbnail, setThumbnail] = useState(initialEntry?.thumbnail || null);
   const fileRef = useRef(null);
   const favorites = [...people].filter((p) => p.favorite);
   const others = [...people].filter((p) => !p.favorite);
+
+  // อัปโหลดไฟล์ 1 ชิ้นขึ้น Storage แล้วคืน public URL (ใช้ได้ทั้งไฟล์หลักและภาพปก)
+  const uploadBlob = async (blob, kind, ext, contentType) => {
+    const urlRes = await fetch("/api/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, size: blob.size, ext }),
+    });
+    if (!urlRes.ok) {
+      const err = await urlRes.json().catch(() => ({}));
+      throw new Error(err.error === "file_too_large" ? "too_large" : "failed");
+    }
+    const { signedUrl, publicUrl } = await urlRes.json();
+    const putRes = await fetch(signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: blob,
+    });
+    if (!putRes.ok) throw new Error("failed");
+    return publicUrl;
+  };
 
   // อัปโหลดได้ทั้งรูปและวิดีโอ
   // รูป -> บีบอัดในเบราว์เซอร์ก่อน (เหลือ ~300KB) แล้วค่อยอัป
@@ -1085,55 +1168,34 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
     setCompressing(true);
     setImageError("");
     try {
-      const blob = video ? f : await compressImageToBlob(f);
-      const contentType = video ? f.type : "image/jpeg";
-      const ext = video ? (f.name.split(".").pop() || "mp4").toLowerCase() : "jpg";
+      if (video) {
+        // วิดีโอ: อัปไฟล์จริง + อัป "ภาพปก" ที่จับจากเฟรมแรกไปด้วย
+        const url = await uploadBlob(f, "video", (f.name.split(".").pop() || "mp4").toLowerCase(), f.type);
 
-      // 1) ขอลิงก์อัปโหลดชั่วคราวจากเซิร์ฟเวอร์เรา (คำขอเล็กมาก ไม่มีไฟล์แนบ)
-      const urlRes = await fetch("/api/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: video ? "video" : "image", size: blob.size, ext }),
-      });
-      if (!urlRes.ok) {
-        const err = await urlRes.json().catch(() => ({}));
-        setImageError(err.error === "file_too_large" ? t("video_too_large") : t("photo_upload_failed"));
-        return;
+        let thumbUrl = null;
+        const thumbBlob = await captureVideoThumbnail(f);
+        if (thumbBlob) {
+          // ถ้าอัปภาพปกไม่สำเร็จ ก็ยังใช้วิดีโอได้ตามปกติ แค่ไม่มีภาพตัวอย่าง
+          try {
+            thumbUrl = await uploadBlob(thumbBlob, "image", "jpg", "image/jpeg");
+          } catch (e) { thumbUrl = null; }
+        }
+
+        setImage(url);
+        setThumbnail(thumbUrl);
+        setMediaType("video");
+      } else {
+        const blob = await compressImageToBlob(f);
+        const url = await uploadBlob(blob, "image", "jpg", "image/jpeg");
+        setImage(url);
+        setThumbnail(null);
+        setMediaType("image");
       }
-      const { signedUrl, publicUrl } = await urlRes.json();
-
-      // 2) ยิงไฟล์ตรงเข้า Supabase ด้วยลิงก์นั้น
-      const putRes = await fetch(signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": contentType },
-        body: blob,
-      });
-      if (!putRes.ok) {
-        setImageError(t("photo_upload_failed"));
-        return;
-      }
-
-      setImage(publicUrl);
-      setMediaType(video ? "video" : "image");
     } catch (e) {
-      setImageError(t("photo_upload_failed"));
+      setImageError(e.message === "too_large" ? t("video_too_large") : t("photo_upload_failed"));
     } finally {
       setCompressing(false);
     }
-  };
-  // เอารูปออก — ถ้าเป็นรูปที่เพิ่งอัปโหลดใหม่ในรอบนี้ (ยังไม่เคยเซฟ) ให้ลบไฟล์ทิ้งเลย
-  // แต่ถ้าเป็นรูปเดิมของความทรงจำที่กำลังแก้อยู่ อย่าเพิ่งลบ เผื่อ user กดยกเลิก
-  // (กรณีนั้น updateEntry จะเป็นคนลบให้ตอนกดบันทึกจริง)
-  const removeImage = () => {
-    if (image && image !== initialEntry?.image) deleteOrphanPhoto(image);
-    setImage(null);
-  };
-
-  // ปิด/ยกเลิกหน้าต่างโดยไม่กดบันทึก — ถ้าเพิ่งอัปโหลดรูปใหม่ไว้ ต้องลบไฟล์ทิ้ง
-  // ไม่งั้นไฟล์จะค้างใน Storage ทั้งที่ไม่มีความทรงจำไหนอ้างถึงเลย (ขยะถาวร)
-  const handleClose = () => {
-    if (image && image !== initialEntry?.image) deleteOrphanPhoto(image);
-    onClose();
   };
 
   const togglePerson = (name) => setSelectedPeople((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
@@ -1148,7 +1210,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
     // ถ้าพิมพ์ชื่อคนไว้ในช่องแต่ลืมกด Enter/+ ก่อนกดบันทึก ให้เก็บชื่อนั้นเข้าไปด้วยเสมอ กันข้อมูลตกหล่น
     const pending = newPerson.trim();
     const finalPeople = pending && !selectedPeople.includes(pending) ? [...selectedPeople, pending] : selectedPeople;
-    onSave({ text: text.trim(), category, date, location: location.trim(), image, mediaType, people: finalPeople });
+    onSave({ text: text.trim(), category, date, location: location.trim(), image, mediaType, thumbnail, people: finalPeople });
   };
 
   return (
@@ -1207,6 +1269,7 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
                 <MediaThumb
                   src={image}
                   mediaType={mediaType}
+                  thumbnail={thumbnail}
                   className="w-full aspect-[16/9] object-cover rounded-lg"
                   showPlayBadge={false}
                 />

@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import ShatterTransition from "../../components/ShatterTransition";
+import AdminBoot from "../../components/AdminBoot";
+import AdminHUDBackground from "../../components/AdminHUDBackground";
 import MediaThumb from "../../components/MediaThumb";
 import { guessMediaType } from "../../lib/mediaConfig";
 import {
@@ -18,11 +19,6 @@ const GREEN = "#33FF66";
 const GREEN_DIM = "#1F9944";
 const RED = "#FF4444";
 const TEXT_DIM = "#5F9B6F";
-
-const BOOT_LINES = [
-  "> verifying admin session...",
-  "> access granted.",
-];
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -84,7 +80,6 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [phase, setPhase] = useState("checking"); // checking | denied | booting | ready
-  const [bootLineIdx, setBootLineIdx] = useState(0);
 
   const [users, setUsers] = useState([]);
   const [selectedEmail, setSelectedEmail] = useState(null);
@@ -119,24 +114,15 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (status !== "authenticated") return;
-    setBootLineIdx(0);
     setPhase("booting");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  useEffect(() => {
-    if (phase !== "booting") return;
-    if (bootLineIdx >= BOOT_LINES.length) {
-      (async () => {
-        const ok = await loadUsers();
-        if (ok) setPhase("ready");
-      })();
-      return;
-    }
-    const timer = setTimeout(() => setBootLineIdx((i) => i + 1), 350);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootLineIdx, phase]);
+  // เรียกข้อมูลจริงคู่ขนานไปกับที่แอนิเมชัน AdminBoot กำลังเล่นอยู่ (ไม่ต้องรอกัน)
+  // แล้วค่อยสลับไปหน้า ready ตอนแอนิเมชันจบพอดี (ดูใน onDone ของ <AdminBoot>)
+  const finishBooting = async () => {
+    const ok = await loadUsers();
+    setPhase(ok ? "ready" : "denied");
+  };
 
   const openUser = async (email) => {
     setSelectedEmail(email);
@@ -272,11 +258,13 @@ export default function AdminPage() {
   return (
     <div style={{ background: BG, minHeight: "100vh", fontFamily: "monospace" }} className="w-full text-sm">
       {leaving && (
-        <ShatterTransition
-          direction="toApp"
+        <AdminBoot
+          direction="exit"
           onDone={() => signOut({ callbackUrl: "/login" })}
         />
       )}
+
+      <AdminHUDBackground />
 
       <style>{`
         @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
@@ -288,26 +276,17 @@ export default function AdminPage() {
       `}</style>
 
       {phase === "checking" && (
-        <div className="min-h-screen flex items-center justify-center" style={{ color: GREEN }}>
+        <div className="min-h-screen flex items-center justify-center relative z-10" style={{ color: GREEN }}>
           <Loader2 className="animate-spin" size={20} />
         </div>
       )}
 
       {phase === "booting" && (
-        <div style={{ color: GREEN }} className="fixed inset-0 z-50 flex items-center justify-center px-6">
-          <div className="w-full max-w-md">
-            {BOOT_LINES.slice(0, bootLineIdx + 1).map((line, i) => (
-              <div key={i} style={{ textShadow: `0 0 8px ${GREEN_DIM}` }} className="mb-1">
-                {line}
-              </div>
-            ))}
-            <span className="admin-cursor">▊</span>
-          </div>
-        </div>
+        <AdminBoot direction="enter" onDone={finishBooting} />
       )}
 
       {phase === "denied" && (
-        <div style={{ color: RED }} className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <div style={{ color: RED }} className="relative z-10 min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
           <Shield size={32} />
           <div className="text-lg">ACCESS DENIED</div>
           <p style={{ color: TEXT_DIM }} className="text-xs max-w-xs">
@@ -324,7 +303,7 @@ export default function AdminPage() {
       )}
 
       {phase === "ready" && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8">
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-8 py-8">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-2" style={{ color: GREEN, textShadow: `0 0 10px ${GREEN_DIM}` }}>
               <Shield size={20} />
@@ -545,7 +524,9 @@ export default function AdminPage() {
                         <MediaThumb
                           src={e.image}
                           mediaType={e.mediaType}
+                          thumbnail={e.thumbnail}
                           className="w-16 h-16 rounded object-cover"
+                          hoverPreview={false}
                         />
                       </button>
                     )}
@@ -613,7 +594,7 @@ export default function AdminPage() {
             <X size={18} style={{ color: "#fff" }} />
           </button>
           {guessMediaType(lightboxImage) === "video" ? (
-            <video
+            <video disablePictureInPicture
               src={lightboxImage}
               controls
               autoPlay

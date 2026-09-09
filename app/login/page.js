@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Brain } from "lucide-react";
 import PasswordField from "../../components/PasswordField";
 import { t } from "../../lib/i18n";
-import ShatterTransition from "../../components/ShatterTransition";
+import AdminBoot from "../../components/AdminBoot";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -87,7 +87,7 @@ function LoginForm() {
       className="w-full flex items-center justify-center px-6 py-12 relative"
     >
       {shattering && (
-        <ShatterTransition direction="toAdmin" onDone={() => router.replace("/admin")} />
+        <AdminBoot direction="enter" onDone={() => router.replace("/admin")} />
       )}
 
       <div className="w-full max-w-sm">
