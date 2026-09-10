@@ -8,6 +8,7 @@ import { Brain } from "lucide-react";
 import PasswordField from "../../components/PasswordField";
 import { t } from "../../lib/i18n";
 import AdminBoot from "../../components/AdminBoot";
+import WelcomeTransition from "../../components/WelcomeTransition";
 
 const INK = "#15131F";
 const INK_SOFT = "#1D1B2A";
@@ -34,6 +35,7 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [shattering, setShattering] = useState(false);
+  const [welcoming, setWelcoming] = useState(false);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -42,7 +44,8 @@ function LoginForm() {
       setShattering(true);
       return;
     }
-    router.replace("/dashboard");
+    // ผู้ใช้ทั่วไป -> เล่นแอนิเมชันต้อนรับก่อน แล้วค่อยไหลเข้าแดชบอร์ด
+    setWelcoming(true);
   }, [status, session, router]);
 
   useEffect(() => {
@@ -88,6 +91,13 @@ function LoginForm() {
     >
       {shattering && (
         <AdminBoot direction="enter" onDone={() => router.replace("/admin")} />
+      )}
+
+      {welcoming && (
+        <WelcomeTransition
+          name={session?.user?.name}
+          onDone={() => router.replace("/dashboard")}
+        />
       )}
 
       <div className="w-full max-w-sm">

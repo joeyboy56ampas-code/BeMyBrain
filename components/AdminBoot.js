@@ -127,20 +127,28 @@ export default function AdminBoot({ direction = "enter", onDone, duration = 2200
             top: "50%",
             left: "50%",
             width: "min(92vw, 420px)",
+            maxWidth: "min(92vw, 420px)",
+            overflow: "hidden",
+            boxSizing: "border-box",
             background: "rgba(5,8,5,0.82)",
             border: `1px solid ${glow}55`,
             boxShadow: `0 0 40px ${glow}22`,
             borderRadius: 10,
             padding: "18px 20px",
             fontFamily: "monospace",
-            fontSize: 12.5,
+            fontSize: "clamp(9.5px, 2.9vw, 12.5px)",
             lineHeight: 1.7,
             color: glow,
             backdropFilter: "blur(2px)",
           }}
         >
           {lines.slice(0, lineIdx).map((line, i) => (
-            <div key={i} className="ab-line" style={{ opacity: line === "" ? 0.3 : 1, whiteSpace: "pre" }}>
+            <div key={i} className="ab-line" style={{
+                opacity: line === "" ? 0.3 : 1,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+              }}>
               {line || "\u00A0"}
             </div>
           ))}

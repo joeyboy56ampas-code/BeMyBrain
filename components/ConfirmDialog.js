@@ -32,7 +32,7 @@ export default function ConfirmDialog({
     >
       <div
         style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }}
-        className="w-full max-w-sm rounded-2xl p-6"
+        className="w-full max-w-sm rounded-2xl p-6 bmb-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-3">

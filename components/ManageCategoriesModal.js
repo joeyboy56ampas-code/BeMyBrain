@@ -80,12 +80,12 @@ export default function ManageCategoriesModal({ open, onClose, categories, entri
     <>
       <div
         style={{ background: "rgba(0,0,0,0.55)" }}
-        className="fixed inset-0 z-50 flex items-center justify-center px-6"
+        className="fixed inset-0 z-50 flex items-center justify-center px-6 bmb-overlay"
         onClick={onClose}
       >
         <div
           style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "85vh" }}
-          className="w-full max-w-md rounded-2xl flex flex-col overflow-hidden"
+          className="w-full max-w-md rounded-2xl flex flex-col overflow-hidden bmb-modal"
           onClick={(e) => e.stopPropagation()}
         >
           <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">

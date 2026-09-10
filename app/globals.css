@@ -17,3 +17,101 @@ textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* =========================================================
+   ระบบแอนิเมชันกลางของ BeMyBrain
+   รวมไว้ที่เดียวเพื่อให้จังหวะการเคลื่อนไหวทั้งเว็บสอดคล้องกัน
+   และแก้ทีเดียวมีผลทุกหน้า ไม่ต้องไล่แก้ทีละไฟล์
+   ========================================================= */
+
+/* จังหวะมาตรฐาน: ออกตัวเร็ว ชะลอนุ่มตอนจบ (เหมือนของมีน้ำหนักจริง) */
+:root {
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-gentle: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- การ์ด/รายการโผล่ขึ้นมา ---- */
+@keyframes bmb-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.bmb-rise { animation: bmb-rise 0.5s var(--ease-soft) both; }
+
+/* ---- เนื้อหาทั้งหน้าค่อย ๆ ปรากฏ (ใช้ตอนสลับมุมมอง) ---- */
+@keyframes bmb-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.bmb-view { animation: bmb-fade-up 0.42s var(--ease-soft) both; }
+
+/* ---- หน้าต่างเด้งขึ้นมา (โมดัล) ---- */
+@keyframes bmb-modal-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.bmb-modal { animation: bmb-modal-in 0.34s var(--ease-soft) both; }
+
+@keyframes bmb-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.bmb-overlay { animation: bmb-overlay-in 0.22s var(--ease-gentle) both; }
+
+/* ---- ปุ่มและการ์ดตอบสนองการกด/ชี้ ----
+   ทำให้ทุกอย่างรู้สึก "กดได้จริง" แทนที่จะนิ่งแข็ง */
+.bmb-press {
+  transition: transform 0.16s var(--ease-gentle), box-shadow 0.2s var(--ease-gentle),
+              border-color 0.2s var(--ease-gentle), opacity 0.2s var(--ease-gentle);
+}
+.bmb-press:hover { transform: translateY(-2px); }
+.bmb-press:active { transform: translateY(0) scale(0.985); }
+
+/* การ์ดที่ยกตัวขึ้นพร้อมเงาเรืองแสงจาง ๆ ตอนเอาเมาส์ชี้ */
+.bmb-lift {
+  transition: transform 0.22s var(--ease-soft), box-shadow 0.25s var(--ease-soft),
+              border-color 0.25s var(--ease-soft);
+}
+.bmb-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.55);
+}
+
+/* ---- ไล่เวลาให้รายการโผล่ทีละใบ (stagger) ----
+   ทำให้กริดดูมีชีวิต แทนที่จะโผล่พรึบเดียวพร้อมกันหมด */
+.bmb-stagger > * { animation: bmb-rise 0.5s var(--ease-soft) both; }
+.bmb-stagger > *:nth-child(1)  { animation-delay: 0.02s; }
+.bmb-stagger > *:nth-child(2)  { animation-delay: 0.06s; }
+.bmb-stagger > *:nth-child(3)  { animation-delay: 0.10s; }
+.bmb-stagger > *:nth-child(4)  { animation-delay: 0.14s; }
+.bmb-stagger > *:nth-child(5)  { animation-delay: 0.18s; }
+.bmb-stagger > *:nth-child(6)  { animation-delay: 0.22s; }
+.bmb-stagger > *:nth-child(7)  { animation-delay: 0.26s; }
+.bmb-stagger > *:nth-child(8)  { animation-delay: 0.30s; }
+.bmb-stagger > *:nth-child(n+9) { animation-delay: 0.34s; }
+
+/* ---- โลโก้สมองเต้นเบา ๆ ตอนกำลังบันทึก ---- */
+@keyframes bmb-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.12); opacity: 0.85; }
+}
+.bmb-pulse { animation: bmb-pulse 1.4s var(--ease-gentle) infinite; }
+
+/* ---- แถบไล่แสงวิ่ง (ใช้ตอนโหลด) ---- */
+@keyframes bmb-shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+.bmb-shimmer {
+  background: linear-gradient(90deg, #1D1B2A 25%, #2C2A3C 50%, #1D1B2A 75%);
+  background-size: 200% 100%;
+  animation: bmb-shimmer 1.4s linear infinite;
+}
+
+/* เคารพผู้ใช้ที่ตั้งค่าเครื่องว่าไม่อยากเห็นแอนิเมชัน (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

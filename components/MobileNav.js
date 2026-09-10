@@ -27,7 +27,7 @@ export default function MobileNav({ view, setView, t, onCompose }) {
           <button
             key={it.id}
             onClick={() => setView(it.id)}
-            className="flex flex-col items-center gap-0.5 py-2 px-3 flex-1"
+            className="flex flex-col items-center gap-0.5 py-2 px-3 flex-1 bmb-press"
           >
             <Icon size={20} style={{ color: active ? GOLD : TEXT_FAINT }} />
             <span style={{ color: active ? GOLD : TEXT_FAINT }} className="text-[10px]">{it.label}</span>
@@ -38,7 +38,7 @@ export default function MobileNav({ view, setView, t, onCompose }) {
       <button
         onClick={onCompose}
         style={{ background: GOLD, color: "#15131F" }}
-        className="w-12 h-12 rounded-full flex items-center justify-center -mt-5 shadow-lg shrink-0"
+        className="w-12 h-12 rounded-full flex items-center justify-center -mt-5 shadow-lg shrink-0 bmb-press"
       >
         <Plus size={22} />
       </button>
@@ -50,7 +50,7 @@ export default function MobileNav({ view, setView, t, onCompose }) {
           <button
             key={it.id}
             onClick={() => setView(it.id)}
-            className="flex flex-col items-center gap-0.5 py-2 px-3 flex-1"
+            className="flex flex-col items-center gap-0.5 py-2 px-3 flex-1 bmb-press"
           >
             <Icon size={20} style={{ color: active ? GOLD : TEXT_FAINT }} />
             <span style={{ color: active ? GOLD : TEXT_FAINT }} className="text-[10px]">{it.label}</span>

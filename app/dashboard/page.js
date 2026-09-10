@@ -507,7 +507,7 @@ export default function Dashboard() {
             </p>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 pb-24 md:pb-10">
+        <div key={`${view}-${activeFilter || ""}`} className="flex-1 overflow-y-auto px-4 sm:px-8 pb-24 md:pb-10 bmb-view">
           {view === "category" && !activeFilter && (
             <CategoryGrid categories={categories} entries={entries} onOpen={(id) => setActiveFilter(id)} t={t} />
           )}
@@ -650,7 +650,7 @@ function DashboardSkeleton() {
         </div>
         <div className="px-4 sm:px-8 pt-8">
           <Shimmer className="h-7 w-32 mb-6" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bmb-stagger">
             {[...Array(6)].map((_, i) => (
               <Shimmer key={i} className="h-28 rounded-2xl" />
             ))}
@@ -672,7 +672,7 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, save
   return (
     <aside style={{ background: INK_SOFT, borderRight: `1px solid ${INK_LINE}`, width: "232px" }} className="hidden md:flex shrink-0 flex-col py-6 px-4">
       <div className="flex items-center gap-2 px-2 mb-8">
-        <Brain size={18} style={{ color: GOLD }} />
+        <Brain size={18} style={{ color: GOLD }} className={saving ? "bmb-pulse" : ""} />
         <span style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.05rem" }}>BeMyBrain</span>
       </div>
       <nav className="flex flex-col gap-1 mb-6">
@@ -681,7 +681,7 @@ function Sidebar({ user, view, setView, onOpenCategory, categories, saving, save
           return (
             <button key={it.id} onClick={() => setView(it.id)}
               style={{ background: activeSel ? INK_LINE : "transparent", color: activeSel ? PAPER : TEXT_MUTED }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors">
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors bmb-press">
               <Icon size={16} style={{ color: activeSel ? GOLD : TEXT_FAINT }} />
               <span>{it.label}</span>
             </button>
@@ -769,7 +769,7 @@ function TopBar({ query, setQuery, onSearch, onCompose, t, onManageCategories, u
 
 function EntryCard({ entry, onRequestDelete, onRequestEdit, onImageClick }) {
   return (
-    <div style={{ background: PAPER, color: INK }} className="group relative rounded-xl p-4 shadow-lg flex flex-col gap-2">
+    <div style={{ background: PAPER, color: INK }} className="group relative rounded-xl p-4 shadow-lg flex flex-col gap-2 bmb-lift">
       <div className="absolute top-2.5 right-2.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         {onRequestEdit && (
           <button
@@ -870,13 +870,13 @@ function CategoryGrid({ categories, entries, onOpen, t }) {
   return (
     <div className="pt-8">
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{t("categories_title")}</h1>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bmb-stagger">
         {categories.map((c) => {
           const Icon = ICONS[c.icon] || ICONS.Sparkles;
           const count = entries.filter((e) => e.category === c.id).length;
           return (
             <button key={c.id} onClick={() => onOpen(c.id)} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }}
-              className="rounded-2xl p-5 text-left flex flex-col gap-4">
+              className="rounded-2xl p-5 text-left flex flex-col gap-4 bmb-lift bmb-press">
               <Icon size={20} style={{ color: GOLD }} />
               <div>
                 <div style={{ color: PAPER }} className="mb-0.5">{c.label}</div>
@@ -898,7 +898,7 @@ function EntryList({ title, entries, onBack, onRequestDelete, onRequestEdit, onI
       </button>
       <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6">{title}</h1>
       {entries.length === 0 ? <EmptyState text={t("empty_category")} /> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bmb-stagger">
           {entries.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       )}
@@ -937,7 +937,7 @@ function TimelineGallery({ entries, mode, setMode, onRequestDelete, onRequestEdi
         </div>
       ))}
       {mode === "grid" && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bmb-stagger">
           {[...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).map((e) => (
             <div key={e.id} style={{ background: PAPER }} className="group relative rounded-lg overflow-hidden aspect-square">
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -1002,7 +1002,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit,
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <MapPin size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bmb-stagger">
           {locations[active].map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       </div>
@@ -1024,7 +1024,7 @@ function LocationView({ entries, active, onOpen, onRequestDelete, onRequestEdit,
         )}
       </div>
       {keys.length === 0 ? <EmptyState text={t("empty_locations")} /> : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bmb-stagger">
           {keys.map((loc) => (
             <button key={loc} onClick={() => onOpen(loc)} style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 text-left flex flex-col gap-4">
               <MapPin size={20} style={{ color: GOLD }} />
@@ -1051,7 +1051,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
         <h1 style={{ fontFamily: FONT_DISPLAY, color: PAPER, fontSize: "1.6rem" }} className="mb-6 flex items-center gap-2">
           <Users size={20} style={{ color: GOLD }} /> {active}
         </h1>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bmb-stagger">
           {byPerson(active).map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       </div>
@@ -1073,7 +1073,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
         )}
       </div>
       {sorted.length === 0 ? <EmptyState text={t("empty_people")} /> : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bmb-stagger">
           {sorted.map((p) => (
             <PersonCard key={p.name} person={p} count={byPerson(p.name).length}
               onOpen={onOpen} onToggleFavorite={onToggleFavorite} t={t} />
@@ -1086,7 +1086,7 @@ function PeopleView({ people, entries, active, onOpen, onToggleFavorite, onReque
 
 function PersonCard({ person: p, count, onOpen, onToggleFavorite, t }) {
   return (
-    <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 flex flex-col gap-4">
+    <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}` }} className="rounded-2xl p-5 flex flex-col gap-4 bmb-lift">
       <div className="flex items-start justify-between">
         <div style={{ background: PAPER, color: INK }} className="w-9 h-9 rounded-full flex items-center justify-center text-sm">{p.name.slice(0, 1)}</div>
         <button onClick={() => onToggleFavorite(p.name)}>
@@ -1118,7 +1118,7 @@ function SearchView({ query, setQuery, entries, onRequestDelete, onRequestEdit, 
       </h1>
       {!query.trim() ? <EmptyState text={t("empty_search_prompt")} /> :
         results.length === 0 ? <EmptyState text={t("empty_search_results")} /> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 bmb-stagger">
           {results.map((e) => <EntryCard key={e.id} entry={e} onRequestDelete={onRequestDelete} onRequestEdit={onRequestEdit} onImageClick={onImageClick} />)}
         </div>
       )}
@@ -1248,8 +1248,8 @@ function Composer({ categories, people, locations, onClose, onSave, t, initialEn
   };
 
   return (
-    <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-end sm:items-center justify-center z-50 sm:p-6">
-      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "90vh" }} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden">
+    <div style={{ background: "rgba(0,0,0,0.55)" }} className="fixed inset-0 flex items-end sm:items-center justify-center z-50 sm:p-6 bmb-overlay">
+      <div style={{ background: INK_SOFT, border: `1px solid ${INK_LINE}`, maxHeight: "90vh" }} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden bmb-modal">
         <div style={{ borderBottom: `1px solid ${INK_LINE}` }} className="flex items-center justify-between px-5 py-4">
           <span style={{ fontFamily: FONT_DISPLAY, color: PAPER }} className="text-lg">{isEdit ? t("composer_edit_title") : t("composer_title")}</span>
           <button onClick={handleClose}><X size={18} style={{ color: TEXT_FAINT }} /></button>
