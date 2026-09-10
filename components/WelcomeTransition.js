@@ -36,6 +36,11 @@ export default function WelcomeTransition({ name, onDone, duration = 1700 }) {
         }
         .wt-brain {
           position: absolute; top: 50%; left: 50%;
+          /* ต้องมี translate ตั้งต้นด้วย ไม่งั้นจุดอ้างอิงจะเป็นมุมซ้ายบนของไอคอน
+             ทำให้ไอคอนเลื่อนไปอยู่ล่างขวาของวงคลื่น แทนที่จะทับกันพอดีตรงกลาง
+             (keyframes มี translate อยู่แล้ว แต่ก่อนแอนิเมชันเริ่มจะยังไม่ถูกใช้) */
+          transform: translate(-50%, -50%);
+          line-height: 0;
           animation: wt-brain-in 900ms cubic-bezier(0.22,1,0.36,1) both;
         }
 
@@ -48,6 +53,8 @@ export default function WelcomeTransition({ name, onDone, duration = 1700 }) {
           position: absolute; top: 50%; left: 50%;
           width: 150px; height: 150px; border-radius: 999px;
           border: 1.5px solid ${GOLD};
+          /* ค่าตั้งต้นให้อยู่กึ่งกลางจริงตั้งแต่ก่อนแอนิเมชันเริ่ม (เหตุผลเดียวกับ .wt-brain) */
+          transform: translate(-50%, -50%);
           animation: wt-wave 1.7s cubic-bezier(0.22,1,0.36,1) infinite;
         }
 
@@ -57,6 +64,7 @@ export default function WelcomeTransition({ name, onDone, duration = 1700 }) {
         }
         .wt-name {
           position: absolute; left: 50%; top: calc(50% + 62px);
+          transform: translateX(-50%);
           animation: wt-name 620ms cubic-bezier(0.22,1,0.36,1) 420ms both;
           white-space: nowrap;
         }

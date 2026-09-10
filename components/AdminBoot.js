@@ -85,6 +85,8 @@ export default function AdminBoot({ direction = "enter", onDone, duration = 2200
           width: 14px; height: 14px; border-radius: 999px;
           background: ${glow};
           box-shadow: 0 0 24px 8px ${glow}aa, 0 0 60px 20px ${glow}44;
+          /* ค่าตั้งต้นให้อยู่กึ่งกลางจริงก่อนแอนิเมชันเริ่ม */
+          transform: translate(-50%, -50%);
           animation: ab-core-pulse 1.1s ease-in-out infinite;
         }
 
